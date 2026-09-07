@@ -42,7 +42,7 @@
         <span class="choice__flood" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
         <span class="choice__body">
           <span class="choice__name">Random Puzzle</span>
-          <span class="choice__sub" id="home-random-sub">Pick a size and deal a fresh one</span>
+          <span class="choice__sub" id="home-random-sub">Flood or Merge, at five sizes</span>
         </span>
         <span class="choice__go" aria-hidden="true">&rsaquo;</span>
       </button>
@@ -66,6 +66,7 @@
     </header>
 
     <div class="card card--single">
+      <div id="mode-pick" class="difficulty difficulty--modes" role="radiogroup" aria-label="Game"></div>
       <div class="setting">
         <div class="setting__head">
           <span class="setting__label">Difficulty</span>
@@ -158,6 +159,7 @@
     <h2 id="howto-title">How to play</h2>
     <ol class="howto">
       <li>The corner cell is <b>yours</b>. So is every cell touching it that shares its color — together they are the <b>blob</b>, drawn with a heavy outline.</li>
+      <li>In <b>Merge</b> there are <b>two</b> blobs, in opposite corners, and one color steers both. They become one the moment they touch, because they are always the same color as each other.</li>
       <li>Pick a color and the whole blob becomes it, swallowing whatever it now matches along its edge.</li>
       <li>Win by turning the <b>whole board</b> one color.</li>
       <li><b>Par</b> is the fewest moves that will finish the board. You are given par plus a little, and on the hardest settings you are given par exactly.</li>

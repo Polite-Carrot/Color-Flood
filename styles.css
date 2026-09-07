@@ -301,6 +301,40 @@ input:focus-visible {
 .card__body { margin: 0 0 16px; color: var(--ink-soft); font-size: 15px; }
 .card__note { margin: 14px 0; color: var(--ink-soft); font-size: 14px; min-height: 1.2em; }
 
+/* Two games, side by side above the slider. Buttons rather than a second
+   slider: a slider says "more of the same in this direction" and these two
+   are not on one axis. */
+.difficulty--modes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 9px;
+  margin-bottom: 18px;
+}
+.diff {
+  padding: 11px 6px;
+  border-radius: 12px;
+  border: var(--stroke) solid var(--ink);
+  background: var(--paper-warm);
+  color: var(--ink-soft);
+  font: inherit;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 var(--lift) 0 var(--ink);
+  transition: transform .09s ease, box-shadow .09s ease, background .14s ease;
+}
+.diff:hover { background: #ffe8c6; }
+.diff:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+/* The chosen one is pressed INTO the card, which is the same language the
+   buttons use when you hold them down. */
+.diff.is-on {
+  background: var(--gold);
+  color: var(--ink);
+  transform: translateY(var(--lift));
+  box-shadow: 0 0 0 var(--ink);
+}
+
 /* ───────── the difficulty slider ─────────
    Five settings, and a slider rather than five buttons: it is one row
    whatever the count, it names the setting at full size, and it is the one

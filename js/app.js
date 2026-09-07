@@ -10,7 +10,7 @@
 import { bestMove, generate } from "./generator.js";
 import { colour, ink, MAX_PALETTE } from "./palette.js";
 import { blobOf, blobColour, canPlay, movesLeft, play, restart, start, undo, won } from "./play.js";
-import { SETTINGS, dailySeed, dailySetting, dayKey, optionsFor, settingFor, } from "./levels.js";
+import { MODES, dailySeed, dailySetting, dayKey, modeLabel, optionsFor, settingFor, settingsFor, } from "./levels.js";
 /* ------------------------------------------------------------------ scaffolding */
 const $ = (id) => {
     const el = document.getElementById(id);
@@ -26,7 +26,7 @@ function show(screen) {
 function openOverlay(id) { $(id).hidden = false; }
 function closeOverlay(id) { $(id).hidden = true; }
 const DEFAULTS = {
-    marks: true, streak: 0, best: 0, total: 0, lastDay: '', difficulty: 'easy',
+    marks: true, streak: 0, best: 0, total: 0, lastDay: '', difficulty: 'easy', mode: 'flood',
 };
 const KEY = 'color-flood/v1';
 function load() {
@@ -42,6 +42,7 @@ function load() {
             total: Number(got.total) || 0,
             lastDay: typeof got.lastDay === 'string' ? got.lastDay : '',
             difficulty: typeof got.difficulty === 'string' ? got.difficulty : DEFAULTS.difficulty,
+            mode: got.mode === 'merge' ? 'merge' : DEFAULTS.mode,
         };
     }
     catch {
@@ -88,7 +89,7 @@ function buildBoard(level) {
                plays the same move as the swatch of its colour. */
             cell.tabIndex = -1;
             cell.setAttribute('aria-hidden', 'true');
-            if (r === level.origin[0] && c === level.origin[1])
+            if (level.origins.some(([orr, orc]) => orr === r && orc === c))
                 cell.classList.add('origin');
             const mark = document.createElement('span');
             cell.append(mark);
@@ -360,11 +361,12 @@ function begin(kind, setting, seed, day) {
         return;
     }
     session = { game: start(level), kind, setting, day, hintsLeft: HINTS, hinted: -1 };
-    $('level-name').textContent = kind === 'daily' ? 'Daily Puzzle' : 'Color Flood';
+    $('level-name').textContent = kind === 'daily' ? 'Daily Puzzle' : modeLabel(setting.mode);
     /* Par belongs here rather than in the stats row: it does not change while
        you play, and the row beside it is for the two numbers that do. */
-    $('level-sub').textContent = (kind === 'daily' ? day + ' · ' + setting.label : setting.label) +
-        ' · ' + level.width + '×' + level.height + ' · par ' + level.par;
+    $('level-sub').textContent =
+        (kind === 'daily' ? day + ' · ' + modeLabel(setting.mode) + ' · ' + setting.label : setting.label) +
+            ' · ' + level.width + '×' + level.height + ' · par ' + level.par;
     /* Show the screen BEFORE building the board. A hidden screen has no
        layout, so the board would measure the room available as zero and fall
        back to sizing itself to its own letters — a 7×7 board about a fifth of
@@ -379,39 +381,85 @@ function begin(kind, setting, seed, day) {
     sizeBoard();
     say('');
 }
-function dealRandom() {
-    const setting = settingFor(saved.difficulty);
+/* Dealing runs the solver, and on the biggest boards that is a few hundred
+   milliseconds — a Merge Expert board can touch a second, because two fronts
+   make par much dearer to find. Long enough that a button which just sits
+   there reads as broken, so it says so and yields until after a paint, the
+   same way the hint does. */
+function dealing(button, work) {
+    const was = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Dealing…';
+    requestAnimationFrame(() => window.setTimeout(() => {
+        try {
+            work();
+        }
+        finally {
+            button.disabled = false;
+            button.textContent = was;
+        }
+    }, 0));
+}
+function dealRandom(button) {
+    const setting = settingFor(saved.mode, saved.difficulty);
     /* A seed nobody has to type: the clock, in base 36. It goes on the win
        screen so a board worth sharing can be dealt again. */
-    begin('random', setting, Date.now().toString(36), '');
+    dealing(button, () => begin('random', setting, Date.now().toString(36), ''));
 }
-function playDaily() {
+function playDaily(button) {
     const now = new Date();
-    begin('daily', dailySetting(now), dailySeed(now), dayKey(now));
+    dealing(button, () => begin('daily', dailySetting(now), dailySeed(now), dayKey(now)));
 }
 /* ------------------------------------------------------------------ screens */
 function paintRandomScreen() {
-    const index = Math.max(0, SETTINGS.findIndex((s) => s.key === saved.difficulty));
-    const setting = SETTINGS[index];
+    const list = settingsFor(saved.mode);
+    /* A difficulty key that exists in one mode exists in the other, but read it
+       back through settingFor rather than assuming — a mode that dropped a
+       setting would otherwise deal whatever happened to be at that index. */
+    const index = Math.max(0, list.findIndex((s) => s.key === saved.difficulty));
+    const setting = list[index];
+    saved.difficulty = setting.key;
+    const modes = $('mode-pick');
+    if (modes.childElementCount !== MODES.length) {
+        modes.replaceChildren();
+        for (const mode of MODES) {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'diff';
+            button.setAttribute('role', 'radio');
+            button.textContent = modeLabel(mode);
+            button.addEventListener('click', () => {
+                saved.mode = mode;
+                save();
+                paintRandomScreen();
+            });
+            modes.append(button);
+        }
+    }
+    for (let i = 0; i < MODES.length; i++) {
+        const button = modes.children[i];
+        button.classList.toggle('is-on', MODES[i] === saved.mode);
+        button.setAttribute('aria-checked', String(MODES[i] === saved.mode));
+    }
+    $('difficulty').max = String(list.length - 1);
     $('difficulty').value = String(index);
     $('difficulty').setAttribute('aria-valuetext', setting.label);
     $('difficulty-name').textContent = setting.label;
     $('difficulty-blurb').textContent = setting.blurb;
     $('difficulty-shape').textContent =
         setting.width + '×' + setting.height + ' · ' + setting.palette + ' colors · ' +
+            (setting.mode === 'merge' ? 'two corners · ' : '') +
             (setting.slack === 0
                 ? 'par exactly'
                 : setting.slack + (setting.slack === 1 ? ' move' : ' moves') + ' over par');
     const ticks = $('difficulty-ticks');
-    if (ticks.childElementCount !== SETTINGS.length) {
-        ticks.replaceChildren();
-        for (const s of SETTINGS) {
-            const span = document.createElement('span');
-            span.textContent = s.label;
-            ticks.append(span);
-        }
+    ticks.replaceChildren();
+    for (const s of list) {
+        const span = document.createElement('span');
+        span.textContent = s.label;
+        ticks.append(span);
     }
-    for (let i = 0; i < SETTINGS.length; i++) {
+    for (let i = 0; i < list.length; i++) {
         ticks.children[i].classList.toggle('is-on', i === index);
     }
 }
@@ -422,7 +470,7 @@ function paintDailyScreen() {
     $('daily-date').textContent = now.toLocaleDateString(undefined, {
         weekday: 'long', day: 'numeric', month: 'long',
     });
-    $('daily-setting').textContent = setting.label;
+    $('daily-setting').textContent = modeLabel(setting.mode) + ' · ' + setting.label;
     $('daily-blurb').textContent = setting.blurb;
     $('streak-now').textContent = String(saved.streak);
     $('streak-best').textContent = String(saved.best);
@@ -442,12 +490,13 @@ function wire() {
     }
     $('back').addEventListener('click', () => show('screen-home'));
     $('difficulty').addEventListener('input', (e) => {
-        saved.difficulty = SETTINGS[Number(e.target.value)].key;
+        const list = settingsFor(saved.mode);
+        saved.difficulty = list[Number(e.target.value)].key;
         save();
         paintRandomScreen();
     });
-    $('deal').addEventListener('click', dealRandom);
-    $('play-daily').addEventListener('click', playDaily);
+    $('deal').addEventListener('click', () => dealRandom($('deal')));
+    $('play-daily').addEventListener('click', () => playDaily($('play-daily')));
     $('undo').addEventListener('click', () => {
         if (session && undo(session.game)) {
             session.hinted = -1;
@@ -464,8 +513,11 @@ function wire() {
             say('');
         }
     });
-    $('again').addEventListener('click', dealRandom);
-    $('win-again').addEventListener('click', () => { closeOverlay('overlay-win'); dealRandom(); });
+    $('again').addEventListener('click', () => dealRandom($('again')));
+    $('win-again').addEventListener('click', () => {
+        closeOverlay('overlay-win');
+        dealRandom($('again'));
+    });
     $('win-home').addEventListener('click', () => { closeOverlay('overlay-win'); show('screen-home'); });
     $('how-to').addEventListener('click', () => openOverlay('overlay-howto'));
     $('settings').addEventListener('click', () => { paintSettings(); openOverlay('overlay-settings'); });

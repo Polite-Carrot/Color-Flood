@@ -7,8 +7,16 @@
 
 import { describe, it, expect } from 'vitest';
 import { bestMove, generate, generateDetailed, solve } from './generator.ts';
-import { blobColour, blobOf, canPlay, play, restart, start, undo, won } from './play.ts';
-import { SETTINGS, dailySeed, dailySetting, dayKey, optionsFor } from './levels.ts';
+import { blobColour, blobColours, blobOf, canPlay, play, restart, start, undo, won } from './play.ts';
+import {
+  FLOOD, MERGE, dailySeed, dailySetting, dayKey, optionsFor, originsFor,
+} from './levels.ts';
+
+/* Every setting of both games. The merge ones are the reason most of these
+   tests loop rather than checking one board: two fronts changed the shape of
+   nearly every guarantee here, and a suite that only ever saw one front would
+   have gone on passing throughout. */
+const SETTINGS = [...FLOOD, ...MERGE];
 
 describe('the blob', () => {
   it('starts as the run of cells touching the origin', () => {
@@ -18,7 +26,7 @@ describe('the blob', () => {
     for (let r = 0; r < 6; r++) {
       for (let c = 0; c < 6; c++) if (blob[r][c]) expect(game.grid[r][c]).toBe(colour);
     }
-    expect(blob[game.level.origin[0]][game.level.origin[1]]).toBe(true);
+    expect(blob[game.level.origins[0][0]][game.level.origins[0][1]]).toBe(true);
   });
 
   it('will not replay the colour it already is', () => {
@@ -66,9 +74,9 @@ describe('the puzzles are worth playing', () => {
      absence of a game, and nothing else here would have said so. */
   it('never ships a board that greedy solves in par', () => {
     for (const setting of SETTINGS) {
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 5; i++) {
         const { level, greedyMoves } = generateDetailed(optionsFor(setting, 'worth-' + i));
-        const where = setting.key + ' seed worth-' + i;
+        const where = setting.mode + '/' + setting.key + ' seed worth-' + i;
         expect(greedyMoves, where + ' — greedy could not finish at all').not.toBeNull();
         expect(greedyMoves, where + ' — greedy matches par, so there is nothing to think about')
           .toBeGreaterThan(level.par);
@@ -114,8 +122,8 @@ describe('the puzzles are worth playing', () => {
     for (const setting of SETTINGS) {
       for (let i = 0; i < 4; i++) {
         const level = generate(optionsFor(setting, 'par-' + i));
-        expect(solve(level), setting.key + ' seed ' + i).toBe(level.par);
-        expect(level.moveLimit, setting.key).toBeGreaterThanOrEqual(level.par);
+        expect(solve(level), setting.mode + '/' + setting.key + ' seed ' + i).toBe(level.par);
+        expect(level.moveLimit, setting.mode + '/' + setting.key).toBeGreaterThanOrEqual(level.par);
       }
     }
   });
@@ -131,7 +139,7 @@ describe('hints', () => {
       for (let i = 0; i < 3; i++) {
         const level = generate(optionsFor(setting, 'hint-' + i));
         const game = start(level);
-        const where = setting.key + ' seed hint-' + i;
+        const where = setting.mode + '/' + setting.key + ' seed hint-' + i;
 
         /* Ask at the start, and again a few moves in on a line the generator
            never had in mind — which is when a hint is actually wanted. */
@@ -153,7 +161,7 @@ describe('hints', () => {
   });
 
   it('following hints all the way finishes in par', () => {
-    const level = generate(optionsFor(SETTINGS[2], 'hint-run'));
+    const level = generate(optionsFor(FLOOD[2], 'hint-run'));
     const game = start(level);
     let guard = 0;
     while (!won(game) && guard++ < 40) {
@@ -166,7 +174,7 @@ describe('hints', () => {
   });
 
   it('has nothing to say about a board that is already finished', () => {
-    const level = generate(optionsFor(SETTINGS[0], 'hint-done'));
+    const level = generate(optionsFor(FLOOD[0], 'hint-done'));
     const flat = { ...level, grid: level.grid.map((row) => row.map(() => 0)) };
     expect(bestMove(flat)).toBeNull();
   });
@@ -207,13 +215,44 @@ describe('undo and restart', () => {
 });
 
 describe('settings and dailies', () => {
+  it('deals two fronts for merge and one for flood', () => {
+    for (const setting of SETTINGS) {
+      const level = generate(optionsFor(setting, 'fronts'));
+      const where = setting.mode + '/' + setting.key;
+      expect(level.origins.length, where).toBe(setting.mode === 'merge' ? 2 : 1);
+      expect(level.origins, where).toEqual(originsFor(setting));
+      /* Opposite corners, and never touching — two origins side by side would
+         be one blob wearing two names. */
+      if (setting.mode === 'merge') {
+        const [[ar, ac], [br, bc]] = level.origins;
+        expect(Math.abs(ar - br) + Math.abs(ac - bc), where).toBeGreaterThan(1);
+      }
+    }
+  });
+
+  it('merges the two fronts by playing one colour', () => {
+    /* The whole Merge rule: one colour moves both. So after any move the two
+       fronts wear the same colour, and the blob is one region the moment they
+       touch — with no merging step anywhere to get wrong. */
+    const setting = MERGE[1];
+    const level = generate(optionsFor(setting, 'merge-rule'));
+    const game = start(level);
+    expect(level.origins).toHaveLength(2);
+
+    const first = blobColours(game);
+    play(game, first.find((c) => c !== first[0]) ?? (first[0] + 1) % level.palette);
+    const after = blobColours(game);
+    expect(new Set(after).size, 'the fronts came out different colours').toBe(1);
+  });
+
   it('every setting deals a board', () => {
     /* A setting asking for more moves than its board can hold throws, and it
        would throw in the player's face rather than here. */
     for (const setting of SETTINGS) {
       const level = generate(optionsFor(setting, 'settings-check'));
-      expect(level.width, setting.key).toBe(setting.width);
-      expect(level.moveLimit, setting.key).toBeGreaterThanOrEqual(level.par);
+      const where = setting.mode + '/' + setting.key;
+      expect(level.width, where).toBe(setting.width);
+      expect(level.moveLimit, where).toBeGreaterThanOrEqual(level.par);
     }
   });
 

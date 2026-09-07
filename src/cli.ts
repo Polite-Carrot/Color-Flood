@@ -114,9 +114,9 @@ function main(): void {
 
   /* The blob starts at the origin, so it is worth pointing at — on a printed
      board it is just another cell. */
-  const [or, oc] = level.origin;
-  console.log('  blob starts at row ' + or + ', column ' + oc +
-    ' (' + colour(level.grid[or][oc]).name + ')');
+  console.log('  blob starts at ' + level.origins
+    .map(([r, c]) => 'row ' + r + ', column ' + c + ' (' + colour(level.grid[r][c]).name + ')')
+    .join('  and  '));
   console.log('  ' + layerCount + ' layers, ' + patchColours.length + ' patches');
   /* The number that says whether the board is worth playing: how far the
      obvious one-move-deep strategy falls short of the best line. Nothing is

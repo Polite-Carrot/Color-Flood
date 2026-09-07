@@ -98,7 +98,7 @@ describe('layer invariants', () => {
       const height = 4 + Math.floor(rand() * 9);   /* 4..12 */
       /* Every board is asked for a legal number of moves — up to the L-band
          ceiling, capped at 10 so the sweep stays quick. */
-      const most = Math.min(bandRadius(width, height, [height - 1, 0]), 10);
+      const most = Math.min(bandRadius(width, height, [[height - 1, 0]]), 10);
       const targetMoves = 1 + Math.floor(rand() * most);
       const palette = 2 + Math.floor(rand() * 7);  /* 2..8 */
       const opts: GenOptions = { width, height, palette, targetMoves, seed: 'sweep-' + i };
@@ -110,7 +110,7 @@ describe('layer invariants', () => {
       expect(() => assertLayerInvariants(width, height, layers, layerCount), where).not.toThrow();
 
       /* The origin is layer 1 and every layer is used. */
-      expect(layers[level.origin[0]][level.origin[1]], where).toBe(1);
+      expect(layers[level.origins[0][0]][level.origins[0][1]], where).toBe(1);
       const counts = new Array(layerCount + 1).fill(0);
       for (const row of layers) for (const n of row) counts[n]++;
       for (let n = 1; n <= layerCount; n++) expect(counts[n], where + ' layer ' + n).toBeGreaterThan(0);
@@ -150,7 +150,7 @@ describe('solve agrees with the construction', () => {
     for (let i = 0; i < 40; i++) {
       const width = 4 + Math.floor(rand() * 6);   /* 4..9 */
       const height = 4 + Math.floor(rand() * 5);  /* 4..8 */
-      const targetMoves = 1 + Math.floor(rand() * Math.min(bandRadius(width, height, [height - 1, 0]), 5));
+      const targetMoves = 1 + Math.floor(rand() * Math.min(bandRadius(width, height, [[height - 1, 0]]), 5));
       const palette = 3 + Math.floor(rand() * 4);
       const opts: GenOptions = { width, height, palette, targetMoves, seed: 'par-' + i };
       const level = generate(opts);
@@ -216,9 +216,9 @@ describe('bad options', () => {
     /* From a corner a 9×9 board is eight bands deep; from the middle it is
        only four, and asking for eight is a different mistake with the same
        cause. */
-    expect(bandRadius(9, 9, [8, 0])).toBe(8);
-    expect(bandRadius(9, 9, [4, 4])).toBe(4);
-    expect(() => generate({ ...base, width: 9, height: 9, targetMoves: 8, origin: [4, 4] }))
+    expect(bandRadius(9, 9, [[8, 0]])).toBe(8);
+    expect(bandRadius(9, 9, [[4, 4]])).toBe(4);
+    expect(() => generate({ ...base, width: 9, height: 9, targetMoves: 8, origins: [[4, 4]] }))
       .toThrow(/holds at most 5/);
   });
 

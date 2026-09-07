@@ -14,9 +14,12 @@ room; the hardest give you par exactly.
 
 **Play it:** https://polite-carrot.github.io/Color-Flood/
 
-A daily puzzle that is the same board for everybody, and a random one at five
-sizes. Every level is generated in the page — nothing is fetched, nothing is
-stored on a server, and the whole site is a few files of plain ES modules.
+Two games. **Flood** starts in one corner. **Merge** starts in two opposite
+corners and one color steers both at once — they become one blob the moment
+they touch. A daily puzzle that is the same board for everybody, and random
+ones at five sizes each. Every level is generated in the page: nothing is
+fetched, nothing is stored on a server, and the whole site is a few files of
+plain ES modules.
 
 ## Where the levels come from
 
@@ -91,6 +94,50 @@ What it costs is the exact par. A layer is no longer one move, so the answer
 is whatever `solve` says — and `solve` had to be rewritten, because breadth-
 first search was only ever adequate when there was nothing to search.
 
+### Merge: two fronts, one steering wheel
+
+The sort game's merge mode mixes colors — red and yellow make orange. That
+does not port: flooding never brings two colors together as materials, so
+there is nothing to mix. What does port is the *shape* of a second mode.
+
+Merge deals two origins, in opposite corners, and a move recolors **both**.
+That single rule is the whole mode, and it is the interesting one because
+every choice is a compromise: the color that opens up the bottom-left front is
+often the wrong one top-right. It also means the fronts always wear the same
+color as each other, so they merge on contact — there is no merging step in
+the code, no merged flag, no moment to get wrong. They are one region when
+they touch, by the same rule that made them two.
+
+Almost everything generalised rather than forking. `origins` is a list, of one
+or two; the layer growth takes several seeds; the blob is whatever is
+connected to *an* origin; the heuristic became multi-source. There is no
+second code path for the two-front case, which matters because the bugs that
+survive are the ones in the rarely-taken branch.
+
+Three things did have to change, and each was found by a board refusing to
+generate rather than by thinking about it:
+
+- **Layers stopped being one region.** A front's own ring already arrives in
+  pieces — the two cells beside a corner origin touch it but not each other —
+  which is why the joining step exists. Joining *across* fronts would thread a
+  path the width of the board, so it is off for Merge and the invariant
+  relaxes to "every piece hangs off the layer below it".
+- **Patches had to be cut per piece**, not per layer. Growing patch seeds
+  across a layer that arrives in pieces leaves whole pieces unreached, and
+  those used to be swept into one patch. A patch in nineteen pieces is not a
+  patch.
+- **Pocket absorption had to keep one region per front.** It kept only the
+  largest, which is right with one front and catastrophic with two: once the
+  fronts meet, the remaining board is genuinely in two parts and the smaller
+  one was being swallowed whole into a single layer. 170 boards in 200 died
+  that way.
+
+**Merge boards are smaller than Flood's at the same difficulty name**, and
+that is a cost rather than a choice. par has to be searched for, and two
+fronts make the search far more expensive — see below. Measured, a two-front
+13×13 took ten seconds to deal and a 15×15 over a minute. Eleven across is
+where it stays under a second, so eleven across is where it stops.
+
 ### The greedy gate
 
 `greedy` plays the most obvious possible strategy: take whichever color on the
@@ -116,6 +163,27 @@ region five steps out needs at least five more moves. Being a lower bound and
 never an overestimate is what keeps the answer exactly optimal rather than
 merely good, and it is what makes the search finish at all — plain breadth-
 first went from settling a board in a few hundred states to not settling it.
+
+Two fronts broke that bound's usefulness without breaking its correctness. A
+region counts as near if *either* front is close to it, so the
+furthest-region number collapses towards half what one front would give —
+while the real difficulty goes *up*, because one color has to serve both
+fronts at once. A* had almost nothing to steer by. Dealing a two-front 11×11
+took twenty seconds.
+
+Two fixes, both cheap, together about twenty times faster:
+
+- **A second bound, from the colors.** To swallow a region of color *c* the
+  blob has to *be* color *c* at the time, so every color still outside has to
+  be played at least once. That count is a floor too, and the larger of two
+  floors is a floor, so taking the max keeps the answer exact.
+- **Break ties towards depth.** These boards have great slabs of positions
+  that all look equally promising, and a tie broken the other way spreads
+  across the whole slab before going anywhere. The goal only ever sits at the
+  deep end.
+
+The second one sped up ordinary one-front boards too — the test suite went
+from 24 seconds to 4.
 
 ### Why nine moves does not fit on a 9×9 board
 
@@ -273,13 +341,21 @@ turning the board one color before the moves run out.
 The difficulty is not really the board size. It is how much room you are given
 over par, and the numbers behind that are measured rather than guessed:
 
-| | Board | Colors | Given | Greedy wins |
+| Flood | Board | Colors | Given | Greedy wins |
 |---|---|---|---|---|
 | Easy | 7×7 | 4 | par + 2 | ~99% |
 | Normal | 10×10 | 5 | par + 1 | ~79% |
 | Hard | 12×12 | 6 | par + 1 | ~48% |
 | Extra Hard | 14×14 | 6 | par exactly | ~4% |
 | Expert | 16×16 | 6 | par exactly | ~3% |
+
+| Merge | Board | Colors | Given |
+|---|---|---|---|
+| Easy | 7×7 | 4 | par + 2 |
+| Normal | 9×9 | 5 | par + 1 |
+| Hard | 10×10 | 6 | par + 1 |
+| Extra Hard | 11×11 | 6 | par exactly |
+| Expert | 11×11 | 6 | par exactly |
 
 "Greedy wins" is the share of boards you can finish by always taking whichever
 color swallows the most, never thinking further ahead. Easy is meant to be
