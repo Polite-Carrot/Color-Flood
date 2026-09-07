@@ -21,6 +21,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Point Pages at this workflow's artifact. Without it the repository
+      # keeps whatever source it had — and the default, "Deploy from a
+      # branch", builds main with Jekyll, which turns README.md into the
+      # index and serves that instead of the game. Both builds run, the
+      # branch one lands second, and the deploy step here still reports
+      # success while nobody can see its output.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22

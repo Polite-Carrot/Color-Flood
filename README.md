@@ -178,8 +178,15 @@ publish. The tests are in front of the deploy rather than beside it, because a
 generator that deals an unsolvable board is not something a player can work
 around.
 
-The repository's **Settings → Pages → Source** has to be set to **GitHub
-Actions** once, by hand. Nothing in a workflow file can set it.
+`actions/configure-pages` sets the Pages source to GitHub Actions as part of
+the run, so there is nothing to click. It is worth knowing what it prevents:
+the default source is "Deploy from a branch", which builds `main` with Jekyll
+— and Jekyll turns `README.md` into the index and serves that. Both builds
+then run on every push, the branch one usually lands second, and the deploy
+step here still reports success while the site shows this file.
+
+If the site ever does show this file, that is what has happened, and
+**Settings → Pages → Source → GitHub Actions** fixes it by hand.
 
 `gen` prints the board in color, each cell carrying its color's letter as well
 — set `NO_COLOR`, pass `--plain`, or pipe the output anywhere and it still
