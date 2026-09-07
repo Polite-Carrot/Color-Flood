@@ -6,7 +6,7 @@
  * time through the same code the buttons call. */
 
 import { describe, it, expect } from 'vitest';
-import { generate, generateDetailed, solve } from './generator.ts';
+import { bestMove, generate, generateDetailed, solve } from './generator.ts';
 import { blobColour, blobOf, canPlay, play, restart, start, undo, won } from './play.ts';
 import { SETTINGS, dailySeed, dailySetting, dayKey, optionsFor } from './levels.ts';
 
@@ -118,6 +118,57 @@ describe('the puzzles are worth playing', () => {
         expect(level.moveLimit, setting.key).toBeGreaterThanOrEqual(level.par);
       }
     }
+  });
+});
+
+describe('hints', () => {
+  /* A hint that is merely plausible is worse than none: it spends one of the
+     two the player gets and can talk them off the best line. So the check is
+     not "it names a colour that grows the blob" but the real thing — playing
+     it must leave a board that needs exactly one move fewer. */
+  it('names a move that is genuinely on a best line', () => {
+    for (const setting of SETTINGS) {
+      for (let i = 0; i < 3; i++) {
+        const level = generate(optionsFor(setting, 'hint-' + i));
+        const game = start(level);
+        const where = setting.key + ' seed hint-' + i;
+
+        /* Ask at the start, and again a few moves in on a line the generator
+           never had in mind — which is when a hint is actually wanted. */
+        for (let step = 0; step < 3 && !won(game); step++) {
+          const before = solve({ ...level, grid: game.grid.map((r) => r.slice()) });
+          expect(before, where + ' step ' + step).not.toBeNull();
+
+          const hint = bestMove({ ...level, grid: game.grid.map((r) => r.slice()) });
+          expect(hint, where + ' step ' + step).not.toBeNull();
+          expect(hint!.moves, where + ' step ' + step).toBe(before);
+
+          play(game, hint!.colour);
+          const after = solve({ ...level, grid: game.grid.map((r) => r.slice()) });
+          expect(after, where + ' step ' + step + ' — the hint did not advance the board')
+            .toBe(before! - 1);
+        }
+      }
+    }
+  });
+
+  it('following hints all the way finishes in par', () => {
+    const level = generate(optionsFor(SETTINGS[2], 'hint-run'));
+    const game = start(level);
+    let guard = 0;
+    while (!won(game) && guard++ < 40) {
+      const hint = bestMove({ ...level, grid: game.grid.map((r) => r.slice()) });
+      expect(hint).not.toBeNull();
+      play(game, hint!.colour);
+    }
+    expect(won(game)).toBe(true);
+    expect(game.played.length).toBe(level.par);
+  });
+
+  it('has nothing to say about a board that is already finished', () => {
+    const level = generate(optionsFor(SETTINGS[0], 'hint-done'));
+    const flat = { ...level, grid: level.grid.map((row) => row.map(() => 0)) };
+    expect(bestMove(flat)).toBeNull();
   });
 });
 

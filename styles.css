@@ -556,6 +556,24 @@ input:focus-visible {
 }
 .swatch span { opacity: .6; }
 
+/* The colour a hint just named. It pulses rather than simply lighting up,
+   because the row is already six saturated squares and a static highlight on
+   one of them is not reliably the first thing the eye finds. Stops as soon as
+   a move is played. */
+.swatch.is-hinted {
+  animation: hinted 1.1s ease-in-out infinite;
+}
+@keyframes hinted {
+  0%, 100% { box-shadow: 0 var(--lift) 0 var(--ink), 0 0 0 0 var(--accent); }
+  50%      { box-shadow: 0 var(--lift) 0 var(--ink), 0 0 0 7px var(--accent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .swatch.is-hinted {
+    animation: none;
+    box-shadow: 0 var(--lift) 0 var(--ink), 0 0 0 5px var(--accent);
+  }
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;

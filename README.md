@@ -290,6 +290,23 @@ regions at once instead of the one that eats the most now.
 Undo and restart are free and unlimited, which is what makes par-exact fair
 rather than cruel.
 
+**Two hints a puzzle**, on every setting. A hint names a color that is on a
+best line *from wherever you have got to* — not from the board as dealt, which
+is the only version worth having: three moves in, on a line the generator
+never had in mind, is exactly when you want one. It costs no move, and it says
+how long the best line still is, so it doubles as a way of finding out how
+badly the last few moves went.
+
+Hints are counted per puzzle, not per attempt. Undo and restart do not give
+them back — hints that came back on restart would be unlimited hints with an
+extra click in front of them. Dealing a new board is what resets them.
+
+The search runs on the page, and on a 16×16 board it takes about a tenth of a
+second warm and closer to half on the very first call, before anything is
+compiled. Long enough that a button which simply did not respond would read as
+broken, so it says *Thinking…* first — after a paint, not merely after a
+`requestAnimationFrame`, which runs before one.
+
 The daily's setting depends on the day of the week, so the week has a shape to
 it: a gentle start and the two hardest settings at the weekend. A streak is
 kept in `localStorage` and nowhere else, so it is per-browser and per-device,
@@ -323,6 +340,12 @@ perfectly happily on a broken board, right up until somebody cannot finish it.
 - **Agreement between `solve` and the level's own par.** A level advertising a
   par its own solver disagrees with is either promising more difficulty than
   it has or asking for something impossible.
+- **Hints are real.** Not "it names a color that grows the blob" but the
+  actual property: playing what the hint says must leave a board that needs
+  exactly one move fewer than before. A merely plausible hint is worse than
+  none, because it spends one of the two you get and can talk you off the best
+  line. Following hints from the first move to the last also has to finish in
+  par exactly.
 - **The construction still holds where it is claimed.** With patches switched
   off a layer is one color again and the layer count *is* the answer, so the
   test walks that line one move at a time through the same code the buttons

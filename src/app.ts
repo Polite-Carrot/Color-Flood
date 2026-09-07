@@ -8,7 +8,7 @@
  *
  * No framework, no bundler, no build step beyond `tsc`. */
 
-import { generate, type Level } from './generator.ts';
+import { bestMove, generate, type Level } from './generator.ts';
 import { colour, ink, MAX_PALETTE } from './palette.ts';
 import { blobOf, blobColour, canPlay, movesLeft, play, restart, start, undo, won, type Game }
   from './play.ts';
@@ -81,6 +81,14 @@ const saved = load();
 
 /* ------------------------------------------------------------------ the session */
 
+/* Two hints a puzzle, on every difficulty.
+ *
+ * Per PUZZLE and not per attempt, which is the only reading of a cap that
+ * means anything — hints that came back on restart would be unlimited hints
+ * with an extra click in front of them. So undo and restart stay free and do
+ * not touch this; only dealing a new board does. */
+const HINTS = 2;
+
 type Session = {
   game: Game;
   kind: 'daily' | 'random';
@@ -88,6 +96,10 @@ type Session = {
   /* The day a daily belongs to, so a win can be recorded against the right
      one even if midnight passes mid-puzzle. */
   day: string;
+  hintsLeft: number;
+  /* The colour the last hint named, so the swatch can show it until a move is
+     played. -1 for none. */
+  hinted: number;
 };
 
 let session: Session | null = null;
@@ -218,7 +230,10 @@ function paintPicker(): void {
     swatch.style.color = ink(i) === 'dark' ? '#2b2142' : '#ffffff';
     (swatch.firstElementChild as HTMLElement).textContent = c.mark;
     swatch.disabled = over || i === current;
-    swatch.setAttribute('aria-label', c.name + (i === current ? ', the color you are now' : ''));
+    swatch.classList.toggle('is-hinted', i === session.hinted && !swatch.disabled);
+    swatch.setAttribute('aria-label', c.name +
+      (i === current ? ', the color you are now' : '') +
+      (i === session.hinted ? ', hinted' : ''));
   }
 }
 
@@ -232,6 +247,10 @@ function paintStats(): void {
   $('stat-left').parentElement!.classList.toggle('is-out', left <= 0);
   ($('undo') as HTMLButtonElement).disabled = used === 0;
   ($('restart') as HTMLButtonElement).disabled = used === 0;
+
+  const hint = $('hint') as HTMLButtonElement;
+  hint.textContent = session.hintsLeft > 0 ? 'Hint (' + session.hintsLeft + ')' : 'Hint';
+  hint.disabled = session.hintsLeft === 0 || won(game) || left <= 0;
 }
 
 function say(text: string, tone: '' | 'is-good' | 'is-warn' = ''): void {
@@ -253,6 +272,7 @@ function tryPlay(index: number): void {
   if (!canPlay(game, index)) return;
 
   const gained = play(game, index);
+  session.hinted = -1;
   paint(gained);
 
   if (won(game)) return finish();
@@ -265,6 +285,68 @@ function tryPlay(index: number): void {
     say('One move left.', 'is-warn');
   } else {
     say('');
+  }
+}
+
+function askHint(): void {
+  if (!session) return;
+  const { game } = session;
+  if (session.hintsLeft <= 0 || won(game) || movesLeft(game) <= 0) return;
+
+  /* The search blocks the thread. On the small boards it is a millisecond and
+     nobody sees this; on a 16×16 it is a tenth of a second warm and closer to
+     half a second on the very first call, before anything is compiled — long
+     enough that a button which simply does not respond reads as broken. So
+     say what is happening first.
+     
+     rAF alone is not enough: it runs BEFORE the paint, so the search would
+     still start on the same frame as the label change and the label would
+     never be seen. rAF then a timeout puts the work after the paint. */
+  const button = $('hint') as HTMLButtonElement;
+  button.disabled = true;
+  button.textContent = 'Thinking…';
+  requestAnimationFrame(() => window.setTimeout(runHint, 0));
+}
+
+function runHint(): void {
+  if (!session) return;
+  const { game } = session;
+  if (session.hintsLeft <= 0 || won(game) || movesLeft(game) <= 0) return paintStats();
+
+  /* Solve from where the player actually is, not from the board as dealt —
+     three moves in, on a line the generator never considered, is exactly when
+     a hint is worth asking for. */
+  const from: Level = { ...game.level, grid: game.grid.map((row) => row.slice()) };
+  const best = bestMove(from);
+
+  if (!best) {
+    /* Only reachable if the search hit its cap, which boards from this
+       generator do not. Say so, put the button back, and do not charge for
+       the hint that was not given. */
+    say('Could not work this one out. Hint not used.', 'is-warn');
+    paintStats();
+    return;
+  }
+
+  session.hintsLeft -= 1;
+  session.hinted = best.colour;
+  paint();
+
+  const name = colour(best.colour).name;
+  const left = movesLeft(game);
+  /* "a best line", not "the best line": there is usually more than one
+     optimal move and this names one of them. A hint that contradicted a line
+     the player had already found would be worse than no hint. */
+  /* Careful with the word "left" here: the stat beside the board already
+     uses it for moves remaining in the limit, and a hint that also said
+     "left" for the length of the best line would put two different meanings
+     of it on screen at once. */
+  if (best.moves > left) {
+    say('Play ' + name + ' — but the best line from here still needs ' + best.moves +
+        ' and you have ' + left + '. Undo, or restart.', 'is-warn');
+  } else {
+    say('Play ' + name + '. A best line from here finishes in ' + best.moves + '.' +
+        (session.hintsLeft ? '' : ' No hints left.'));
   }
 }
 
@@ -320,7 +402,7 @@ function begin(kind: 'daily' | 'random', setting: Setting, seed: string, day: st
     return;
   }
 
-  session = { game: start(level), kind, setting, day };
+  session = { game: start(level), kind, setting, day, hintsLeft: HINTS, hinted: -1 };
   $('level-name').textContent = kind === 'daily' ? 'Daily Puzzle' : 'Color Flood';
   /* Par belongs here rather than in the stats row: it does not change while
      you play, and the row beside it is for the two numbers that do. */
@@ -421,10 +503,11 @@ function wire(): void {
   $('play-daily').addEventListener('click', playDaily);
 
   $('undo').addEventListener('click', () => {
-    if (session && undo(session.game)) { paint(); say(''); }
+    if (session && undo(session.game)) { session.hinted = -1; paint(); say(''); }
   });
+  $('hint').addEventListener('click', askHint);
   $('restart').addEventListener('click', () => {
-    if (session) { restart(session.game); paint(); say(''); }
+    if (session) { restart(session.game); session.hinted = -1; paint(); say(''); }
   });
   $('again').addEventListener('click', dealRandom);
 
@@ -460,6 +543,7 @@ function wire(): void {
     if (!$('screen-game').classList.contains('is-active')) return;
     if (e.key === 'Escape') return show('screen-home');
     if (e.key === 'u' || e.key === 'U') return void $('undo').click();
+    if (e.key === 'h' || e.key === 'H') return void $('hint').click();
     if (e.key === 'r' || e.key === 'R') return void $('restart').click();
     const n = Number(e.key);
     if (Number.isInteger(n) && n >= 1 && n <= MAX_PALETTE) tryPlay(n - 1);

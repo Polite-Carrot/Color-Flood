@@ -960,13 +960,13 @@ function stillToGo(regions: Regions, blobRegion: number): number {
    costs more than the search saves. */
 class Heap {
   private f: number[] = [];
-  private items: Array<{ g: number; grid: Uint8Array }> = [];
+  private items: Array<{ g: number; grid: Uint8Array; first: number }> = [];
 
   get size(): number { return this.f.length; }
 
-  push(f: number, g: number, grid: Uint8Array): void {
+  push(f: number, g: number, grid: Uint8Array, first: number): void {
     this.f.push(f);
-    this.items.push({ g, grid });
+    this.items.push({ g, grid, first });
     let i = this.f.length - 1;
     while (i > 0) {
       const parent = (i - 1) >> 1;
@@ -976,10 +976,10 @@ class Heap {
     }
   }
 
-  pop(): { g: number; grid: Uint8Array } {
+  pop(): { g: number; grid: Uint8Array; first: number } {
     const top = this.items[0];
     const lastF = this.f.pop() as number;
-    const lastItem = this.items.pop() as { g: number; grid: Uint8Array };
+    const lastItem = this.items.pop() as { g: number; grid: Uint8Array; first: number };
     if (this.f.length) {
       this.f[0] = lastF;
       this.items[0] = lastItem;
@@ -1020,7 +1020,7 @@ class Heap {
  * next, you could have played instead.
  *
  * Returns null rather than a number if the cap is reached. */
-export function solve(level: Level, cap: number = 200000): number | null {
+function search(level: Level, cap: number): { moves: number; first: number } | null {
   const w = level.width;
   const h = level.height;
   const n = w * h;
@@ -1032,20 +1032,21 @@ export function solve(level: Level, cap: number = 200000): number | null {
   const key = (g: Uint8Array) => String.fromCharCode.apply(null, Array.from(g));
 
   const first = regionsOf(start, w, h);
-  if (first.count === 1) return 0;
+  /* Already one colour: no moves needed and so no move to name. */
+  if (first.count === 1) return { moves: 0, first: -1 };
 
   const heap = new Heap();
   const best = new Map<string, number>();
-  heap.push(stillToGo(first, first.regionAt[origin]), 0, start);
+  heap.push(stillToGo(first, first.regionAt[origin]), 0, start, -1);
   best.set(key(start), 0);
 
   let states = 1;
   while (heap.size) {
-    const { g, grid } = heap.pop();
+    const { g, grid, first: opener } = heap.pop();
     const regions = regionsOf(grid, w, h);
     const blob = regions.regionAt[origin];
 
-    if (regions.count === 1) return g;
+    if (regions.count === 1) return { moves: g, first: opener };
     /* A stale heap entry: this board was reached more cheaply after it was
        queued. */
     const seen = best.get(key(grid));
@@ -1065,10 +1066,37 @@ export function solve(level: Level, cap: number = 200000): number | null {
       best.set(k, g + 1);
 
       const after = regionsOf(next, w, h);
-      heap.push(g + 1 + stillToGo(after, after.regionAt[origin]), g + 1, next);
+      /* Every node remembers which move opened its line, so reaching the goal
+         answers "what should I play now" as well as "how many". Carrying one
+         number is cheaper than keeping every parent and walking back. */
+      heap.push(g + 1 + stillToGo(after, after.regionAt[origin]), g + 1, next,
+                g === 0 ? colour : opener);
     }
   }
   return null;
+}
+
+export function solve(level: Level, cap: number = 200000): number | null {
+  const found = search(level, cap);
+  return found ? found.moves : null;
+}
+
+/* What to play from here, and how many moves are left after it.
+ *
+ * The same search, asked for the move rather than the count. There is usually
+ * more than one optimal move and this names one of them, not "the" one — a
+ * hint that disagreed with a line the player had already found would be worse
+ * than no hint at all, so the wording it feeds says a move rather than the
+ * move.
+ *
+ * Null if the board is already finished, or if the search hit its cap. */
+export function bestMove(
+  level: Level,
+  cap: number = 200000,
+): { colour: number; moves: number } | null {
+  const found = search(level, cap);
+  if (!found || found.first < 0) return null;
+  return { colour: found.first, moves: found.moves };
 }
 
 /* How many moves the most obvious possible strategy takes: at every turn play
