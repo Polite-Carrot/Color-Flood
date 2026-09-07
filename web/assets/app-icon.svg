@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Color Flood">
+  <rect width="64" height="64" rx="14" fill="#a5e2fa"/>
+  <g stroke="#2b2142" stroke-width="3" stroke-linejoin="round">
+    <path d="M8 56 V8 H56 V56 Z" fill="#ffd028"/>
+    <path d="M8 56 V20 Q30 26 34 56 Z" fill="#3b7bf7"/>
+    <path d="M8 56 V38 Q20 40 22 56 Z" fill="#f5423c"/>
+  </g>
+</svg>

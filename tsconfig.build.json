@@ -1,0 +1,19 @@
+{
+  /* The web build. Emits plain ES modules — no bundler, no loader, nothing to
+     install on the page: index.html loads web/app.js as a module and the
+     browser follows the imports from there.
+
+     `rewriteRelativeImportExtensions` is what makes that work while the
+     source still says `./generator.ts`. The .ts specifier is what lets Node
+     run the CLI and the tests straight from source; the emitted JS needs
+     `./generator.js` or the browser 404s. This rewrites them on the way out
+     so both are true at once. */
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": true
+  },
+  "exclude": ["src/generator.test.ts", "src/cli.ts"]
+}

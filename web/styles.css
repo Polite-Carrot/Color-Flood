@@ -1,0 +1,684 @@
+/* Color Flood — styles
+ *
+ * The same visual world as the sort game, deliberately: a bright board under
+ * a summer sky, drawn with cartoon weight — thick ink outlines and hard,
+ * unblurred drop shadows. The weight is doing a job here rather than being a
+ * style. A flood board is a field of vivid colour edge to edge, so every
+ * piece that is not board — buttons, cards, the blob's own outline — has to
+ * be able to hold its own against it.
+ *
+ * Deliberately single-theme, so there are no prefers-color-scheme blocks:
+ * every colour below is painted explicitly. */
+
+:root {
+  /* the scene */
+  --sky-top:   #79cbf2;
+  --sky-mid:   #a5e2fa;
+  --sky-low:   #d3f1fc;
+
+  /* surfaces and ink */
+  --paper:     #fffdf7;
+  --paper-warm:#fff3e0;
+  --ink:       #2b2142;
+  --ink-soft:  #6f6389;
+  --ink-faint: rgba(43, 33, 66, .16);
+
+  /* action */
+  --accent:      #ff5d8f;
+  --accent-deep: #e0446f;
+  --gold:        #ffc93c;
+  --danger:      #d8365f;
+
+  --lift:   4px;                       /* hard-shadow offset on raised things */
+  --stroke: 3px;
+  --radius: 16px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+body {
+  /* An explicit colour underneath the gradient: the gradient is a background
+     IMAGE, so without this the computed background-color stays transparent. */
+  background-color: var(--sky-mid);
+  background-image:
+    linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 42%, var(--sky-low) 100%);
+  background-attachment: fixed;
+  color: var(--ink);
+  font: 16px/1.55 "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  font-weight: 600;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  max-width: 1040px;
+  margin: 0 auto;
+  /* --vvh is the visual viewport, published by app.ts. Preferred over dvh
+     because dvh resolves to the viewport with the browser's toolbars
+     retracted — the tallest it could be — and on iOS Safari the toolbar is
+     drawn over the page, so a board sized to dvh runs underneath it. */
+  height: 100vh;
+  height: 100dvh;
+  height: var(--vvh, 100dvh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding:
+    calc(18px + env(safe-area-inset-top))
+    calc(16px + env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom))
+    calc(16px + env(safe-area-inset-left));
+}
+
+.screen { display: none; flex: 1; min-height: 0; }
+.screen.is-active {
+  display: flex;
+  flex-direction: column;
+  animation: rise .34s cubic-bezier(.2, .9, .3, 1.2) both;
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ───────── buttons ───────── */
+
+.btn {
+  appearance: none;
+  border: var(--stroke) solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-family: "Baloo 2", "Nunito", sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.1;
+  padding: 11px 18px;
+  border-radius: 13px;
+  cursor: pointer;
+  box-shadow: 0 var(--lift) 0 var(--ink);
+  transition: transform .09s ease, box-shadow .09s ease, background .14s ease;
+}
+.btn:hover:not(:disabled) { background: var(--paper-warm); }
+/* Press the button physically into the page. */
+.btn:active:not(:disabled) { transform: translateY(var(--lift)); box-shadow: 0 0 0 var(--ink); }
+.btn:disabled { opacity: .45; cursor: default; box-shadow: 0 var(--lift) 0 var(--ink-faint); }
+
+.btn:focus-visible,
+.choice:focus-visible,
+.swatch:focus-visible,
+input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.btn--primary { background: var(--accent); color: #fff; }
+.btn--primary:hover:not(:disabled) { background: var(--accent-deep); }
+.btn--ghost {
+  background: rgba(255, 255, 255, .62);
+  box-shadow: 0 var(--lift) 0 var(--ink-faint);
+}
+.btn--ghost:hover:not(:disabled) { background: #fff; }
+.btn--quiet { font-size: 15px; color: var(--ink-soft); }
+.btn--wide  { width: 100%; }
+
+/* ───────── home ───────── */
+
+.masthead { text-align: center; margin: 10px 0 26px; }
+
+.masthead__mark {
+  display: flex;
+  justify-content: center;
+  gap: 9px;
+  padding-top: 10px;
+  margin-bottom: 14px;
+}
+.masthead__mark span {
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  background: var(--c);
+  border: var(--stroke) solid var(--ink);
+  animation: bob 2.4s ease-in-out infinite;
+}
+.masthead__mark span:nth-child(2) { animation-delay: .18s; }
+.masthead__mark span:nth-child(3) { animation-delay: .36s; }
+@keyframes bob { 50% { transform: translateY(-8px) rotate(-4deg); } }
+
+.masthead h1 {
+  margin: 0;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: clamp(42px, 9vw, 74px);
+  line-height: .98;
+  letter-spacing: -.01em;
+  color: #fff;
+  /* Stroke behind the fill, then a hard drop below: cartoon lettering. */
+  -webkit-text-stroke: 7px var(--ink);
+  paint-order: stroke fill;
+  text-shadow: 0 7px 0 var(--ink);
+  text-wrap: balance;
+}
+.masthead__tag {
+  margin: 16px auto 0;
+  max-width: 30ch;
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 17px;
+  text-wrap: balance;
+}
+
+.choices {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 16px 18px;
+  text-align: left;
+  background: var(--paper);
+  border: var(--stroke) solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 0 var(--ink);
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform .09s ease, box-shadow .09s ease, background .14s ease;
+}
+.choice:hover { background: var(--paper-warm); }
+.choice:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--ink); }
+.choice__body { flex: 1; display: grid; gap: 2px; }
+.choice__name {
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 22px;
+  line-height: 1.1;
+}
+.choice__sub { color: var(--ink-soft); font-size: 14px; }
+.choice__go { font-size: 30px; color: var(--ink-soft); line-height: 1; }
+
+/* a four-band flood, shrunk to an icon */
+.choice__flood {
+  flex: 0 0 46px;
+  height: 46px;
+  display: grid;
+  grid-template: repeat(2, 1fr) / repeat(2, 1fr);
+  gap: 3px;
+}
+.choice__flood i {
+  border: 2px solid var(--ink);
+  border-radius: 5px;
+}
+.choice__flood i:nth-child(1) { background: #f5423c; }
+.choice__flood i:nth-child(2) { background: #ffd028; }
+.choice__flood i:nth-child(3) { background: #3b7bf7; }
+.choice__flood i:nth-child(4) { background: #2fc15e; }
+
+/* a calendar page, borrowed wholesale from the sort game */
+.choice__cal {
+  flex: 0 0 46px;
+  height: 46px;
+  position: relative;
+  border: var(--stroke) solid var(--ink);
+  border-radius: 9px;
+  background: var(--paper-warm);
+  display: grid;
+  grid-template: repeat(2, 1fr) / repeat(2, 1fr);
+  gap: 4px;
+  padding: 13px 7px 7px;
+}
+.choice__cal-top {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 9px;
+  background: var(--accent);
+  border-bottom: 2px solid var(--ink);
+  border-radius: 5px 5px 0 0;
+}
+.choice__cal-dot { border-radius: 2px; background: var(--ink-faint); }
+.choice__cal-dot.is-on { background: var(--gold); }
+
+.menu-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 30px;
+}
+
+/* ───────── sub screens ───────── */
+
+.subhead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto 22px;
+}
+.subhead__title { flex: 1; text-align: center; line-height: 1.15; }
+.subhead__title h2 {
+  margin: 0;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 27px;
+}
+.subhead__title span { color: var(--ink-soft); font-size: 14px; font-weight: 700; }
+/* keeps the heading centred against the back button */
+.subhead__balance { flex: 0 0 96px; }
+
+.card {
+  background: var(--paper);
+  border: var(--stroke) solid var(--ink);
+  border-radius: var(--radius);
+  padding: 22px;
+  box-shadow: 0 6px 0 var(--ink);
+}
+/* width: 100% matters: this is a flex item in a column screen with auto side
+   margins, and auto side margins make a flex item shrink to its content — so
+   without it the card resizes when its text does. */
+.card--single { width: 100%; max-width: 420px; margin: 0 auto; }
+.card__title {
+  margin: 0 0 4px;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 25px;
+  line-height: 1.1;
+}
+.card__body { margin: 0 0 16px; color: var(--ink-soft); font-size: 15px; }
+.card__note { margin: 14px 0; color: var(--ink-soft); font-size: 14px; min-height: 1.2em; }
+
+/* ───────── the difficulty slider ─────────
+   Five settings, and a slider rather than five buttons: it is one row
+   whatever the count, it names the setting at full size, and it is the one
+   control here whose meaning IS an ordering. */
+.setting { margin-bottom: 4px; }
+.setting__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.setting__label {
+  font-size: 13px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.setting__name {
+  font-family: "Baloo 2", sans-serif;
+  font-size: 20px;
+  color: var(--ink);
+}
+.setting__slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 26px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.setting__slider::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: 999px;
+  border: var(--stroke) solid var(--ink);
+  background: var(--paper-warm);
+}
+.setting__slider::-moz-range-track {
+  height: 10px;
+  border-radius: 999px;
+  border: var(--stroke) solid var(--ink);
+  background: var(--paper-warm);
+}
+/* The thumb carries the same gold and the same hard shadow as a selected
+   button would, so it reads as part of the same set of pieces. */
+.setting__slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -10px;
+  border-radius: 50%;
+  border: var(--stroke) solid var(--ink);
+  background: var(--gold);
+  box-shadow: 0 2px 0 var(--ink);
+  transition: transform .09s ease;
+}
+.setting__slider::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border: var(--stroke) solid var(--ink);
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 2px 0 var(--ink);
+}
+.setting__slider:active::-webkit-slider-thumb { transform: scale(1.08); }
+.setting__slider:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 999px; }
+
+.setting__ticks { display: flex; justify-content: space-between; padding: 0 4px; margin-top: 2px; }
+.setting__ticks span { font-size: 11px; color: var(--ink-soft); flex: 1; text-align: center; }
+.setting__ticks span:first-child { text-align: left; }
+.setting__ticks span:last-child { text-align: right; }
+.setting__ticks span.is-on { color: var(--ink); font-weight: 700; }
+
+.difficulty__blurb {
+  margin: 12px 0 4px;
+  color: var(--ink-soft);
+  font-size: 14px;
+  /* Two lines' worth, always, so picking a setting whose description happens
+     to fit on one line does not shorten the card and jump everything under
+     it up the screen. */
+  line-height: 1.5;
+  min-height: 3em;
+}
+
+.streak { display: flex; gap: 10px; justify-content: center; margin: 4px 0 2px; }
+
+/* ───────── the game ───────── */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto 14px;
+}
+.topbar__title { flex: 1; text-align: center; min-width: 0; }
+.topbar__title h2 {
+  margin: 0;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 22px;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar__title span { color: var(--ink-soft); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.topbar__stats { display: flex; gap: 8px; }
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.05;
+  min-width: 52px;
+  padding: 5px 8px;
+  border-radius: 11px;
+  border: 2px solid var(--ink);
+  background: var(--paper-warm);
+}
+.stat b {
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 21px;
+  font-variant-numeric: tabular-nums;
+}
+.stat.is-out b { color: var(--accent-deep); }
+.stat small {
+  color: var(--ink-soft);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+
+/* The board takes whatever room is left after the chrome, and is square. Both
+   halves matter: min-height: 0 lets a flex item shrink below its content, and
+   without it a 15×15 board pushes the colour picker off a short window. */
+.board-wrap {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  margin-bottom: 14px;
+}
+.board {
+  display: grid;
+  /* The ink shows through as a hairline between cells, which is the whole
+     reason the board's own background is ink rather than nothing. Bands read
+     as bands either way, but the seams make the cells countable — and
+     counting cells is how you check a move before spending it. */
+  gap: 1px;
+  border: var(--stroke) solid var(--ink);
+  border-radius: 12px;
+  box-shadow: 0 6px 0 var(--ink);
+  overflow: hidden;
+  /* Sized in JS to the largest square that fits, in whole pixels per cell —
+     fractional cell sizes leave hairline seams between the cells on some
+     zoom levels, and a flood board is nothing but seams. */
+  background: var(--ink);
+  touch-action: manipulation;
+}
+
+.cell {
+  /* A button, so every cell is a real target with real focus and press
+     behaviour — but with every default a button brings stripped off, or the
+     browser's own border draws over the seams above. */
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  line-height: 1;
+  user-select: none;
+  /* The colour change is the whole animation. Everything else about a move —
+     the outline moving, the letters changing — happens at the same time and
+     over the same duration, so a move reads as one event. */
+  transition: background-color .22s ease;
+}
+/* The mark is there so the board is readable without relying on colour alone.
+   It is deliberately faint: on a solved board it is the only thing left to
+   look at, and a grid of hard black letters is not a reward. */
+.cell span { opacity: .5; pointer-events: none; }
+.board.no-marks .cell span { display: none; }
+
+/* Cells that just changed hands. A short pop, not a long one: at Expert a
+   single move can turn forty cells over, and anything slower than this reads
+   as lag rather than as feedback. */
+@keyframes gained { from { transform: scale(.55); opacity: .35; } }
+.cell.is-new { animation: gained .26s cubic-bezier(.2, .9, .3, 1.6) both; }
+
+/* The blob's outline, drawn as inset shadows on the cells at its edge rather
+   than as borders — a border would change the cell's size and shuffle the
+   whole grid every move. The colour is the same ink as everything else, so
+   the blob reads as a held piece rather than as a highlight. */
+.cell { box-shadow: none; }
+
+/* Where the blob starts. A dot in the corner rather than a ring around the
+   middle: the middle already has the cell's letter in it, and two marks on
+   top of each other read as neither. */
+.origin::after {
+  content: "";
+  position: absolute;
+  left: 13%;
+  top: 13%;
+  width: 22%;
+  height: 22%;
+  border-radius: 50%;
+  background: rgba(43, 33, 66, .55);
+  pointer-events: none;
+}
+
+/* ───────── the colour picker ───────── */
+
+.picker {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 auto;
+  max-width: 620px;
+}
+.swatch {
+  width: 54px;
+  height: 54px;
+  border: var(--stroke) solid var(--ink);
+  border-radius: 14px;
+  box-shadow: 0 var(--lift) 0 var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 19px;
+  display: grid;
+  place-items: center;
+  transition: transform .09s ease, box-shadow .09s ease, opacity .14s ease;
+}
+.swatch:active:not(:disabled) { transform: translateY(var(--lift)); box-shadow: 0 0 0 var(--ink); }
+/* The colour the blob already is. Not hidden — where a colour sits in the row
+   has to stay put, or the player reaches for the wrong one — but clearly not
+   a move. */
+.swatch:disabled {
+  cursor: default;
+  opacity: .4;
+  transform: translateY(var(--lift));
+  box-shadow: 0 0 0 var(--ink-faint);
+}
+.swatch span { opacity: .6; }
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.status {
+  text-align: center;
+  margin: 12px auto 0;
+  max-width: 52ch;
+  /* Room for two lines always, so a message appearing cannot push the board
+     around or reintroduce a scrollbar. */
+  min-height: 2.7em;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink-soft);
+}
+.status.is-good { color: #1f8f4d; }
+.status.is-warn { color: var(--accent-deep); }
+
+.keys {
+  text-align: center;
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: rgba(43, 33, 66, .5);
+}
+.keys b { color: var(--ink); font-weight: 800; }
+/* No keyboard to speak of, so the hint is only noise. */
+@media (pointer: coarse) { .keys { display: none; } }
+
+/* ───────── overlays ───────── */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(43, 33, 66, .5);
+  display: grid;
+  place-items: center;
+  padding:
+    calc(20px + env(safe-area-inset-top))
+    calc(20px + env(safe-area-inset-right))
+    calc(20px + env(safe-area-inset-bottom))
+    calc(20px + env(safe-area-inset-left));
+  z-index: 30;
+  animation: fade .18s ease both;
+}
+.overlay[hidden] { display: none; }
+@keyframes fade { from { opacity: 0; } }
+
+.modal {
+  background: var(--paper);
+  border: var(--stroke) solid var(--ink);
+  border-radius: 22px;
+  padding: 28px;
+  max-width: 390px;
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  text-align: center;
+  box-shadow: 0 8px 0 var(--ink);
+  animation: pop .34s cubic-bezier(.2, .9, .3, 1.5) both;
+}
+.modal--wide { max-width: 540px; text-align: left; }
+@keyframes pop { from { opacity: 0; transform: scale(.86) translateY(14px); } }
+
+.modal h2 {
+  margin: 0 0 6px;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 30px;
+  line-height: 1.05;
+}
+.modal__line { color: var(--ink-soft); font-size: 15px; margin: 12px 0 0; }
+.modal__swatch {
+  width: 74px; height: 74px;
+  margin: 0 auto 16px;
+  border-radius: 20px;
+  border: var(--stroke) solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+}
+.modal__actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+/* Says what just happened, under the buttons that did it. Empty until then,
+   so it takes no room and cannot be read as a warning already there. */
+.modal__note { margin: 14px 0 0; min-height: 0; font-size: 14px; color: var(--ink-soft); }
+.modal__note:empty { margin: 0; }
+
+.howto { margin: 14px 0 0; padding-left: 22px; color: var(--ink-soft); font-size: 15px; }
+.howto li { margin-bottom: 10px; }
+.howto b { color: var(--ink); }
+
+.settings-list { display: grid; gap: 10px; margin-top: 18px; text-align: left; }
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 2px solid var(--ink-faint);
+  border-radius: 13px;
+}
+.settings-row--danger { border-color: var(--danger); }
+.settings-row--danger > span { color: var(--danger); }
+.settings-row > span { font-weight: 700; }
+.settings-row .btn { padding: 7px 14px; font-size: 15px; }
+.settings-row .btn[aria-pressed="true"] { background: var(--gold); }
+
+/* ───────── short windows ─────────
+   A phone in landscape has almost no height to give, so the parts that are
+   decoration go first and the board keeps what is left. */
+@media (max-height: 560px) {
+  .masthead { margin: 4px 0 16px; }
+  .masthead__mark { display: none; }
+  .status { min-height: 1.4em; margin-top: 8px; }
+  .toolbar { margin-top: 10px; }
+  .swatch { width: 44px; height: 44px; font-size: 17px; }
+}

@@ -9,10 +9,11 @@ swallowing whatever it now matches along its edge. Win by turning the whole
 board one color; the level tells you how many moves you get, and that number
 is the fewest that will do it, not a guess.
 
-**What is here so far:** the generator, and nothing else. There is no game to
-play yet — no board to tap, no screen, no app. What there is deals levels,
-proves they can be finished, and prints one to a terminal so you can look at
-it. Everything a player will eventually touch is still to come.
+**Play it:** https://polite-carrot.github.io/Color-Flood/
+
+A daily puzzle that is the same board for everybody, and a random one at five
+sizes. Every level is generated in the page — nothing is fetched, nothing is
+stored on a server, and the whole site is a few files of plain ES modules.
 
 ## Where the levels come from
 
@@ -92,19 +93,43 @@ set by the search rather than by the construction, and a board whose real par
 wandered outside `targetMoves..targetMoves+2` is thrown back and another
 dealt.
 
+### Why the outer bands look striped
+
+Nested bands filling a fixed board get thinner the more of them there are —
+a band's thickness is roughly its area divided by its length, and the bands
+near the edge are long. At its ceiling a board has no freedom at all: every
+layer has to be exactly one band wider than the last, the ragged growth is
+suppressed, and what comes out is stripes.
+
+So the settings all leave the board three bands of slack, and the growth
+spends that slack in a few places rather than evenly — each layer bulges into
+two to five lobes and stays thin between them, and the next layer has to wrap
+those lobes, so the shape compounds outwards instead of being smoothed away.
+The middle of a board comes out genuinely blobby; the last band or two,
+against the far edge, is thin whatever anyone does. That one is geometry, not
+a setting.
+
 ## The parts
 
 | File | What it is |
 |------|------------|
 | `src/generator.ts` | The generator and the solver. No imports, no DOM, no `Math.random`. |
+| `src/play.ts` | The rules: what the blob is, what a move does, undo. |
+| `src/levels.ts` | The five settings, and which puzzle today's is. |
 | `src/palette.ts` | What a color index looks like. The generator never sees it. |
-| `src/cli.ts` | Deals a board and prints it. |
-| `src/generator.test.ts` | The three things that would quietly ruin the game. |
+| `src/web/app.ts` | The browser build. The only file that knows a DOM exists. |
+| `src/cli.ts` | Deals a board and prints it to a terminal. |
+| `web/` | The page, its stylesheet, and the fonts. |
 
-`generator.ts` imports nothing at all, on purpose: the web build and the React
-Native build both take this same file, so it must not reach for a document, a
-filesystem, or a global random number generator. It deals in color *indices*;
-what index 2 looks like is `palette.ts`'s business and, later, the renderer's.
+The first four are pure and none of them import anything but a type, which is
+the point: a React Native build takes those four as they are and writes its
+own version of `app.ts`. `generator.ts` in particular imports nothing at all,
+and a test enforces it — the check strips the comments first, because the
+comments discuss `Math.random` at some length and a check that reads them
+finds exactly what it was written to forbid.
+
+The generator deals in color *indices*; what index 2 looks like is
+`palette.ts`'s business, and the palette is the sort game's, hex for hex.
 
 ```ts
 generate(opts: GenOptions): Level
@@ -131,8 +156,30 @@ breaking `Math.random` and dealing a board anyway.
 ```
 npm install
 npm test
-npm run gen -- --w 9 --h 7 --moves 3 --seed 2026-09-07
+npm run gen -- --w 9 --h 7 --moves 3 --seed 2026-09-07   # a board in the terminal
+npm run build:web && npm run serve                        # the game, on :8080
 ```
+
+There is no bundler and no framework. `build:web` runs `tsc` over `src/` into
+plain ES modules and copies `web/` over the top; `index.html` loads
+`web/app.js` as a module and the browser follows the imports from there. The
+whole deployable site is about 390 KB, and 244 KB of that is the two fonts,
+inlined as data URIs so the page fetches nothing at all.
+
+The source imports say `./generator.ts`, which is what lets Node run the CLI
+and the tests straight from source with no build; `rewriteRelativeImportExtensions`
+turns them into `./generator.js` on the way out, which is what the browser
+needs. Both are true at once, and neither is a copy of the other.
+
+### Deploying
+
+Pushing to `main` runs `.github/workflows/pages.yml`: typecheck, tests, build,
+publish. The tests are in front of the deploy rather than beside it, because a
+generator that deals an unsolvable board is not something a player can work
+around.
+
+The repository's **Settings → Pages → Source** has to be set to **GitHub
+Actions** once, by hand. Nothing in a workflow file can set it.
 
 `gen` prints the board in color, each cell carrying its color's letter as well
 — set `NO_COLOR`, pass `--plain`, or pipe the output anywhere and it still
@@ -154,6 +201,25 @@ if the answer disagrees with the move limit on the level. That is the check
 that catches a change to the growth quietly breaking the construction, and it
 costs a millisecond.
 
+## The game
+
+The corner cell is yours, along with every cell touching it that shares its
+color — the blob, drawn with a heavy outline so there is never a question
+about what you hold. Pick a color and the whole blob becomes it. Win by
+turning the board one color.
+
+Five sizes, from a 7×7 in four moves to a 16×16 in twelve. The daily's setting
+depends on the day of the week, so the week has a shape to it: a gentle start
+and the two hardest settings at the weekend. A streak is kept in
+`localStorage` and nowhere else, so it is per-browser and per-device, and
+clearing site data clears it.
+
+Tapping a **cell** plays that cell's color, which on a phone is much the
+fastest way in — you point at the band you want rather than hunting for it in
+the row of swatches. Every cell also carries its color's initial, faintly, so
+the board can be read without relying on color alone; that can be turned off
+in Settings.
+
 ## What the tests are actually for
 
 None of the three failures they catch look like failures. The game plays
@@ -170,6 +236,13 @@ perfectly happily on a broken board, right up until somebody cannot finish it.
   moves; the search has to find three. Not two, which would mean a level
   advertising more difficulty than it has, and not four, which would mean a
   level nobody can beat.
+- **The line actually plays.** The construction proves a board can be finished
+  in n moves; this walks that line one move at a time through the same code
+  the buttons call, on every setting, and checks it wins on the last one.
+- **Nothing writes back into the level it was dealt.** Restart goes back to
+  the level's own grid, so a move that reached into it would leave a board
+  that could not be restarted — and the bug would only show on somebody's
+  second attempt at a puzzle.
 
 ## Spelling
 

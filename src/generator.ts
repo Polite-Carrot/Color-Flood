@@ -269,7 +269,13 @@ function growLayers(
          the other direction and the early layers swallow the board, the last
          two come out one cell each, and the closing moves of the puzzle flip
          a single square. */
-      const want = Math.round((free / (toCome + 1)) * (0.6 + 0.8 * rand()));
+      /* An even share of what is left, then thrown about a good deal. The
+         spread matters more than the average: bands of the same thickness
+         read as stripes however ragged their edges are, and it is a fat layer
+         next to a thin one that stops the board looking ruled. It is safe to
+         be greedy here because the clamps below are the real limit — this
+         only says what the layer would like. */
+      const want = Math.round((free / (toCome + 1)) * (0.35 + 1.5 * rand()));
       const spare = countFree(layerOf, marked) - toCome;
       const budget = Math.max(0, Math.min(want - size, spare));
 
@@ -395,11 +401,24 @@ function joinPieces(w: number, h: number, layerOf: Int32Array, marked: Uint8Arra
   return added;
 }
 
-/* Randomised growth outwards from the marked cells: pick a cell off the
-   frontier at random, take it, and push its own free neighbours on. Picking at
-   random rather than in order is what makes the boundary ragged — a queue
-   grows an even ring back again. Returns the cells taken, so a caller that
-   decides they cost too much can give them back. */
+/* Randomised growth outwards from the marked cells, and the two random
+   choices in it are doing different jobs.
+ *
+ * Taking cells off the frontier at RANDOM rather than in order is what stops
+ * the growth being a queue, which would lay down an even ring and put back
+ * the concentric shape the extras exist to break up.
+ *
+ * Starting from a HANDFUL of points on the frontier rather than all of it is
+ * the more important of the two, and it took a look at a finished board to
+ * see why. Grow from the whole boundary at once and every part of it creeps
+ * outwards at the same rate: the layer comes out an even thickness, which is
+ * a ring again however randomly the individual cells were picked. Grow from
+ * three places and the layer bulges into lobes there and stays thin between
+ * them — and the next layer has to wrap those lobes, so the shape compounds
+ * outwards instead of being smoothed away.
+ *
+ * Returns the cells taken, so a caller that decides they cost too much can
+ * give them back. */
 function growBlob(
   w: number,
   h: number,
@@ -412,12 +431,28 @@ function growBlob(
   const n = w * h;
   const nb: number[] = [];
   const queued = new Uint8Array(n);
-  const frontier: number[] = [];
+
+  const edge: number[] = [];
   for (let i = 0; i < n; i++) {
     if (!marked[i]) continue;
     for (const j of neighbours(i, w, h, nb)) {
-      if (!layerOf[j] && !marked[j] && !queued[j]) { queued[j] = 1; frontier.push(j); }
+      if (!layerOf[j] && !marked[j] && !queued[j]) { queued[j] = 1; edge.push(j); }
     }
+  }
+
+  /* One lobe per twenty cells of budget, between two and five of them. Fewer
+     than two and a thin layer is a single blister on one side; more than five
+     on a big board and they merge back into the even ring. */
+  const lobes = Math.max(2, Math.min(5, Math.round(budget / 20) + 2));
+  const frontier: number[] = [];
+  queued.fill(0);
+  for (let k = 0; k < lobes && edge.length; k++) {
+    const pick = randInt(rand, edge.length);
+    const cell = edge[pick];
+    edge[pick] = edge[edge.length - 1];
+    edge.pop();
+    queued[cell] = 1;
+    frontier.push(cell);
   }
 
   const taken: number[] = [];

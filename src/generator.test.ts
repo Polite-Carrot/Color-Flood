@@ -5,6 +5,7 @@
  * them show up as a crash: the game plays perfectly happily on a board whose
  * par is one more than it says, right up until somebody cannot finish it. */
 
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import {
   generate,
@@ -53,6 +54,36 @@ describe('determinism', () => {
       expect(() => generate({ ...base, strandChance: 0.5 })).not.toThrow();
     } finally {
       Math.random = real;
+    }
+  });
+});
+
+describe('the module stays portable', () => {
+  /* The web build and a phone build both take generator.ts as it is, so it
+     must not acquire an import — of anything, including a type — or reach for
+     a global that only one of them has. Both are the kind of change that is
+     made in a moment, works perfectly in whichever build it was written in,
+     and is only noticed in the other one much later. */
+  const source = readFileSync(new URL('./generator.ts', import.meta.url), 'utf8');
+  /* The comments in that file discuss Math.random and the DOM at some length,
+     and a check that reads them finds exactly what it was written to forbid.
+     So the prose comes out first. Stripping comments with a regex is wrong in
+     general — a string holding "/*" defeats it — but there is no such string
+     in the file, and the alternative is a parser. */
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+
+  it('imports nothing', () => {
+    expect(code).not.toMatch(/^\s*import\s/m);
+    expect(code).not.toMatch(/\brequire\s*\(/);
+  });
+
+  it('never reaches for Math.random', () => {
+    expect(code).not.toContain('Math.random');
+  });
+
+  it('touches no host globals', () => {
+    for (const global of ['document', 'window', 'process', 'localStorage', 'fetch']) {
+      expect(code, global).not.toMatch(new RegExp('\\b' + global + '\\b'));
     }
   });
 });
