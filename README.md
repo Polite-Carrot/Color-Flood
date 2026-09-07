@@ -178,15 +178,27 @@ publish. The tests are in front of the deploy rather than beside it, because a
 generator that deals an unsolvable board is not something a player can work
 around.
 
-`actions/configure-pages` sets the Pages source to GitHub Actions as part of
-the run, so there is nothing to click. It is worth knowing what it prevents:
-the default source is "Deploy from a branch", which builds `main` with Jekyll
-— and Jekyll turns `README.md` into the index and serves that. Both builds
-then run on every push, the branch one usually lands second, and the deploy
-step here still reports success while the site shows this file.
+The workflow sets the Pages source to GitHub Actions itself, so there is
+nothing to click — and it does so twice, which is worth explaining rather than
+tidying away.
 
-If the site ever does show this file, that is what has happened, and
-**Settings → Pages → Source → GitHub Actions** fixes it by hand.
+The default source is "Deploy from a branch". That builds `main` with Jekyll,
+and Jekyll turns `README.md` into the index and serves *that*. Uploading an
+artifact and deploying it does not override this: both builds run on every
+push, and the branch build tends to land second and win. The failure is
+invisible from the Actions tab, because every step of both runs reports
+success. The only symptom is this file at the URL.
+
+`actions/configure-pages` is the usual remedy, but with `enablement: true` it
+only covers a repository that has no Pages site at all — against one already
+pointed at a branch it reports success and changes nothing. So the workflow
+follows it with an explicit `PUT .../pages` setting `build_type=workflow`.
+That is a no-op once it has taken, and it is left in the workflow rather than
+run once by hand so a fork or a rename lands on its feet.
+
+The deployment history is where to look if this is ever in doubt: each
+deployment carries the app that made it, `github-actions` for this workflow
+and `github-pages` for the branch build. The newest one is what is live.
 
 `gen` prints the board in color, each cell carrying its color's letter as well
 — set `NO_COLOR`, pass `--plain`, or pipe the output anywhere and it still

@@ -31,6 +31,20 @@ jobs:
         with:
           enablement: true
 
+      # And then say it again, plainly. configure-pages reports success on a
+      # repository whose source is already set to a branch without changing
+      # it — enablement only covers the case where there is no Pages site at
+      # all. The observable result was two deployments per push, the branch
+      # build landing second, and README.md at the URL.
+      #
+      # Idempotent: once the build type is `workflow` this is a no-op, and it
+      # is left in rather than run once by hand so that a fork, a rename or a
+      # repository restored from a backup lands on its feet.
+      - name: Serve Pages from this workflow, not from the branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/pages" -f build_type=workflow
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
