@@ -8,11 +8,17 @@
     "build": "tsc -p tsconfig.build.json",
     "serve": "node scripts/serve.js",
     "fonts": "node scripts/fetch-fonts.js",
+    "www": "node scripts/sync-www.js",
+    "sync": "node scripts/sync-www.js && cap sync",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.6.9",
+    "@capacitor/cli": "^7.6.9",
+    "@capacitor/core": "^7.6.9",
+    "@capacitor/ios": "^7.6.9",
     "@types/node": "^26.4.1",
     "typescript": "^5.8.0",
     "vitest": "^2.1.0"

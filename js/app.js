@@ -10,7 +10,7 @@
 import { bestMove, generate } from "./generator.js";
 import { colour, ink, MAX_PALETTE } from "./palette.js";
 import { blobOf, blobColour, canPlay, movesLeft, play, restart, start, undo, won } from "./play.js";
-import { MODES, dailySeed, dailySetting, dayKey, modeLabel, optionsFor, settingFor, settingsFor, } from "./levels.js";
+import { MODES, bestStreakOf, dailySeed, dailySetting, dayKey, firstDailyDate, isPlayableDay, modeLabel, optionsFor, settingFor, settingsFor, streakOf, } from "./levels.js";
 import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from "./campaign.js";
 /* ------------------------------------------------------------------ scaffolding */
 const $ = (id) => {
@@ -29,7 +29,7 @@ function closeOverlay(id) { $(id).hidden = true; }
 const blankRun = () => new Array(CAMPAIGN_LENGTH).fill(0);
 const blankProgress = () => ({ best: blankRun(), par: blankRun() });
 const DEFAULTS = {
-    marks: true, streak: 0, best: 0, total: 0, lastDay: '', difficulty: 'easy', mode: 'flood',
+    marks: true, days: [], difficulty: 'easy', mode: 'flood',
     progress: { flood: blankProgress(), merge: blankProgress() },
 };
 /* Read a saved campaign back defensively. A run that is the wrong length —
@@ -59,10 +59,14 @@ function load() {
         const got = JSON.parse(raw);
         return {
             marks: typeof got.marks === 'boolean' ? got.marks : DEFAULTS.marks,
-            streak: Number(got.streak) || 0,
-            best: Number(got.best) || 0,
-            total: Number(got.total) || 0,
-            lastDay: typeof got.lastDay === 'string' ? got.lastDay : '',
+            /* A save from before the calendar kept only the last day played. It is
+               one day rather than none, so it is carried over rather than dropped —
+               somebody's streak of one is still their streak. */
+            days: Array.isArray(got.days)
+                ? got.days.filter((d) => typeof d === 'string')
+                : (typeof got.lastDay === 'string' && got.lastDay
+                    ? [got.lastDay]
+                    : []),
             difficulty: typeof got.difficulty === 'string' ? got.difficulty : DEFAULTS.difficulty,
             mode: got.mode === 'merge' ? 'merge' : DEFAULTS.mode,
             progress: {
@@ -369,39 +373,49 @@ function finish() {
         ? used + (used === 1 ? ' move' : ' moves') + ' — nothing finishes this board faster.'
         : used + ' moves, against a par of ' + par + '. ' +
             (used - par === 1 ? 'One move off the best line.' : (used - par) + ' moves off the best line.');
+    const solved = new Set(saved.days);
+    const streak = streakOf(solved, new Date());
     $('win-note').textContent = kind === 'daily'
-        ? 'Daily streak: ' + saved.streak + (saved.streak === saved.best && saved.best > 1 ? ' — your best yet.' : '')
+        ? 'Daily streak: ' + streak +
+            (streak > 1 && streak === bestStreakOf(solved) ? ' — your best yet.' : '')
         : campaign ? modeLabel(campaign.mode) + ' level ' + campaign.n
             : setting.label + ' · seed ' + game.level.seed;
+    /* Three kinds of puzzle, three different things to do next — and the way
+       back is named for where it actually goes, since "Home" on a daily meant
+       the home screen when what anybody wants is the calendar they came from. */
     const next = $('win-next');
     const again = $('win-again');
+    const home = $('win-home');
     if (campaign) {
         next.hidden = campaign.n >= CAMPAIGN_LENGTH;
         again.hidden = true;
-        $('win-note').textContent = campaign.n >= CAMPAIGN_LENGTH
-            ? 'That is the last of them. ' + modeLabel(campaign.mode) + ' finished.'
-            : ($('win-note').textContent ?? '');
+        home.textContent = 'Levels';
+        if (campaign.n >= CAMPAIGN_LENGTH) {
+            $('win-note').textContent =
+                'That is the last of them. ' + modeLabel(campaign.mode) + ' finished.';
+        }
+    }
+    else if (kind === 'daily') {
+        next.hidden = true;
+        again.hidden = true;
+        home.textContent = 'Calendar';
     }
     else {
         next.hidden = true;
         again.hidden = false;
-        again.textContent = kind === 'daily' ? 'Random puzzle' : 'New puzzle';
+        again.textContent = 'New puzzle';
+        home.textContent = 'Home';
     }
     openOverlay('overlay-win');
     say('Flooded in ' + used + '.', 'is-good');
 }
-/* A daily counts once. Playing it again on the same day is welcome but does
-   not move the streak, and neither does replaying it after midnight — the day
-   the puzzle belongs to is fixed when it is dealt. */
+/* A daily counts once. Playing it again — later the same day, or a month
+   later off the calendar — is welcome and changes nothing, because the record
+   is a set of days and the day is already in it. */
 function recordDaily(day) {
-    if (saved.lastDay === day)
+    if (saved.days.includes(day))
         return;
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    saved.streak = saved.lastDay === dayKey(yesterday) ? saved.streak + 1 : 1;
-    saved.best = Math.max(saved.best, saved.streak);
-    saved.total += 1;
-    saved.lastDay = day;
+    saved.days.push(day);
     save();
 }
 /* ------------------------------------------------------------------ dealing */
@@ -503,9 +517,8 @@ function dealRandom(button) {
        screen so a board worth sharing can be dealt again. */
     dealing(button, () => begin('random', setting, Date.now().toString(36), ''));
 }
-function playDaily(button) {
-    const now = new Date();
-    dealing(button, () => begin('daily', dailySetting(now), dailySeed(now), dayKey(now)));
+function playDaily(date, button) {
+    dealing(button, () => begin('daily', dailySetting(date), dailySeed(date), dayKey(date)));
 }
 /* ------------------------------------------------------------------ screens */
 function paintRandomScreen() {
@@ -599,30 +612,87 @@ function showLevels(mode) {
     }
     show('screen-levels');
 }
+/* Which month the calendar is showing. Today's, until somebody pages back. */
+let shownMonth = new Date();
 function paintDailyScreen() {
-    const now = new Date();
-    const setting = dailySetting(now);
-    const day = dayKey(now);
-    $('daily-date').textContent = now.toLocaleDateString(undefined, {
-        weekday: 'long', day: 'numeric', month: 'long',
-    });
-    $('daily-setting').textContent = modeLabel(setting.mode) + ' · ' + setting.label;
-    $('daily-blurb').textContent = setting.blurb;
-    $('streak-now').textContent = String(saved.streak);
-    $('streak-best').textContent = String(saved.best);
-    $('streak-total').textContent = String(saved.total);
-    $('daily-note').textContent = saved.lastDay === day
-        ? "Today's is done. Play it again if you like — the streak is already counted."
-        : 'Everybody gets the same board today.';
-    $('play-daily').textContent =
-        saved.lastDay === day ? "Play today's again" : "Play today's puzzle";
+    const today = new Date();
+    const solved = new Set(saved.days);
+    const first = firstDailyDate();
+    const year = shownMonth.getFullYear();
+    const month = shownMonth.getMonth();
+    $('cal-month').textContent =
+        shownMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+    /* Paging stops where the puzzles do, in both directions. */
+    $('cal-prev').disabled =
+        year === first.getFullYear() && month === first.getMonth();
+    $('cal-next').disabled =
+        year === today.getFullYear() && month === today.getMonth();
+    const grid = $('cal-grid');
+    grid.replaceChildren();
+    /* Monday-first, to match the column headings. getDay is Sunday-first, so
+       Sunday's 0 becomes 6 and everything else shifts down one. */
+    const lead = (new Date(year, month, 1).getDay() + 6) % 7;
+    for (let i = 0; i < lead; i++) {
+        const blank = document.createElement('li');
+        blank.className = 'cal--blank';
+        blank.setAttribute('aria-hidden', 'true');
+        grid.append(blank);
+    }
+    const days = new Date(year, month + 1, 0).getDate();
+    for (let d = 1; d <= days; d++) {
+        const date = new Date(year, month, d);
+        const key = dayKey(date);
+        const setting = dailySetting(date);
+        const playable = isPlayableDay(date, today);
+        const item = document.createElement('li');
+        const cell = document.createElement('button');
+        cell.type = 'button';
+        cell.className = 'cal__day';
+        cell.disabled = !playable;
+        if (key === dayKey(today))
+            cell.classList.add('is-today');
+        if (solved.has(key))
+            cell.classList.add('is-done');
+        const number = document.createElement('span');
+        number.textContent = String(d);
+        const dot = document.createElement('i');
+        dot.className = 'cal__dot cal__dot--' + setting.mode;
+        cell.append(number, dot);
+        cell.setAttribute('aria-label', date.toLocaleDateString(undefined, { day: 'numeric', month: 'long' }) +
+            ' · ' + modeLabel(setting.mode) + ' · ' + setting.label +
+            (solved.has(key) ? ' · done' : playable ? '' : ' · not playable'));
+        if (playable)
+            cell.addEventListener('click', () => playDaily(date, cell));
+        item.append(cell);
+        grid.append(item);
+    }
+    const streak = streakOf(solved, today);
+    $('streak-now').textContent = String(streak);
+    $('streak-best').textContent = String(bestStreakOf(solved));
+    $('streak-total').textContent = String(solved.size);
+    const todaySetting = dailySetting(today);
+    $('daily-note').textContent = solved.has(dayKey(today))
+        ? "Today's is done — " + modeLabel(todaySetting.mode) + ' · ' + todaySetting.label
+        : "Today: " + modeLabel(todaySetting.mode) + ' · ' + todaySetting.label;
 }
 /* ------------------------------------------------------------------ wiring */
 function wire() {
     $('go-flood').addEventListener('click', () => showLevels('flood'));
     $('go-merge').addEventListener('click', () => showLevels('merge'));
     $('go-random').addEventListener('click', () => { paintRandomScreen(); show('screen-random'); });
-    $('go-daily').addEventListener('click', () => { paintDailyScreen(); show('screen-daily'); });
+    $('go-daily').addEventListener('click', () => {
+        shownMonth = new Date();
+        paintDailyScreen();
+        show('screen-daily');
+    });
+    $('cal-prev').addEventListener('click', () => {
+        shownMonth = new Date(shownMonth.getFullYear(), shownMonth.getMonth() - 1, 1);
+        paintDailyScreen();
+    });
+    $('cal-next').addEventListener('click', () => {
+        shownMonth = new Date(shownMonth.getFullYear(), shownMonth.getMonth() + 1, 1);
+        paintDailyScreen();
+    });
     for (const btn of document.querySelectorAll('[data-home]')) {
         btn.addEventListener('click', () => show('screen-home'));
     }
@@ -631,6 +701,10 @@ function wire() {
     $('back').addEventListener('click', () => {
         if (session?.campaign)
             showLevels(session.campaign.mode);
+        else if (session?.kind === 'daily') {
+            paintDailyScreen();
+            show('screen-daily');
+        }
         else
             show('screen-home');
     });
@@ -641,7 +715,6 @@ function wire() {
         paintRandomScreen();
     });
     $('deal').addEventListener('click', () => dealRandom($('deal')));
-    $('play-daily').addEventListener('click', () => playDaily($('play-daily')));
     $('undo').addEventListener('click', () => {
         if (session && undo(session.game)) {
             session.hinted = -1;
@@ -673,6 +746,10 @@ function wire() {
         closeOverlay('overlay-win');
         if (session?.campaign)
             showLevels(session.campaign.mode);
+        else if (session?.kind === 'daily') {
+            paintDailyScreen();
+            show('screen-daily');
+        }
         else
             show('screen-home');
     });
@@ -686,15 +763,6 @@ function wire() {
         save();
         paintSettings();
         $('board').classList.toggle('no-marks', !saved.marks);
-    });
-    $('set-reset').addEventListener('click', () => {
-        saved.streak = 0;
-        saved.best = 0;
-        saved.total = 0;
-        saved.lastDay = '';
-        save();
-        paintSettings();
-        $('settings-note').textContent = 'Streak reset.';
     });
     $('set-wipe').addEventListener('click', () => {
         saved.progress = { flood: blankProgress(), merge: blankProgress() };

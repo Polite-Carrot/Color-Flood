@@ -126,16 +126,25 @@ export function optionsFor(setting, seed) {
 /* The first daily. Nothing before this is playable, so the calendar has a
    beginning rather than running back for ever. */
 export const FIRST_DAILY = { year: 2026, month: 9, day: 1 };
-/* Sunday first, to match Date#getDay. The week has a shape to it — a gentle
-   start, both games in it, and the two hardest settings at the weekend. */
+/* Sunday first, to match Date#getDay — but the WEEK reads Monday to Sunday,
+   because that is how the calendar is laid out and how people think of a week
+   getting on with itself.
+
+   It ramps: Monday is the gentlest and Sunday the hardest, and the two games
+   alternate the whole way down so no two days running are the same shape.
+   
+   Except one, and it cannot be helped: seven is odd, so any two-game cycle
+   over a week has to repeat somewhere. The repeat is put at the Sunday-to-
+   Monday seam, between the hardest puzzle of one week and the gentlest of the
+   next, where it is least likely to read as a repeat at all. */
 const WEEK = [
-    { mode: 'merge', key: 'hard' }, /* Sun */
+    { mode: 'flood', key: 'expert' }, /* Sun */
     { mode: 'flood', key: 'easy' }, /* Mon */
-    { mode: 'merge', key: 'normal' }, /* Tue */
-    { mode: 'flood', key: 'hard' }, /* Wed */
+    { mode: 'merge', key: 'easy' }, /* Tue */
+    { mode: 'flood', key: 'normal' }, /* Wed */
     { mode: 'merge', key: 'normal' }, /* Thu */
-    { mode: 'flood', key: 'extraHard' }, /* Fri */
-    { mode: 'merge', key: 'expert' }, /* Sat */
+    { mode: 'flood', key: 'hard' }, /* Fri */
+    { mode: 'merge', key: 'extraHard' }, /* Sat */
 ];
 export function dayKey(date) {
     const pad = (n) => (n < 10 ? '0' : '') + n;
@@ -152,7 +161,61 @@ export function dailySeed(date) {
     const setting = dailySetting(date);
     return dayKey(date) + '/' + setting.mode + '/' + setting.key;
 }
-export function isBeforeFirstDaily(date) {
-    const first = new Date(FIRST_DAILY.year, FIRST_DAILY.month - 1, FIRST_DAILY.day);
-    return date < first;
+export function firstDailyDate() {
+    return new Date(FIRST_DAILY.year, FIRST_DAILY.month - 1, FIRST_DAILY.day);
+}
+/* A day is playable if the calendar has reached it and it has not run off the
+   end of time. Days before the first are not puzzles that were missed, they
+   are days the game did not exist. */
+export function isPlayableDay(date, today) {
+    const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const now = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return day >= firstDailyDate() && day <= now;
+}
+function shift(date, days) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+}
+/* How many days in a row, ending today or yesterday.
+ *
+ * Worked out from the days actually solved rather than counted up as they
+ * happen. A stored counter has to be nudged at exactly the right moments —
+ * once a day, not twice, not on a replay, and not when the clock crosses
+ * midnight mid-puzzle — and every one of those is a chance to be wrong in a
+ * way nobody can check. Derived, it is simply what the record says.
+ *
+ * Ending YESTERDAY still counts: a streak is not broken until a day passes
+ * unplayed, and telling somebody at breakfast that their streak is zero
+ * because they have not played yet today would be both wrong and unkind. */
+export function streakOf(solved, today) {
+    let from = solved.has(dayKey(today)) ? today : shift(today, -1);
+    if (!solved.has(dayKey(from)))
+        return 0;
+    let run = 0;
+    while (solved.has(dayKey(from))) {
+        run++;
+        from = shift(from, -1);
+    }
+    return run;
+}
+/* The longest run there has ever been, which needs the whole record rather
+   than the tail of it. */
+export function bestStreakOf(solved) {
+    let best = 0;
+    for (const key of solved) {
+        const [y, m, d] = key.split('-').map(Number);
+        /* Only count from the START of a run, or every day of a run of ten would
+           walk the whole run and this would be quadratic for no reason. */
+        const before = shift(new Date(y, m - 1, d), -1);
+        if (solved.has(dayKey(before)))
+            continue;
+        let at = new Date(y, m - 1, d);
+        let run = 0;
+        while (solved.has(dayKey(at))) {
+            run++;
+            at = shift(at, 1);
+        }
+        if (run > best)
+            best = run;
+    }
+    return best;
 }

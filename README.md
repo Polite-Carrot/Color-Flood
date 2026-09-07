@@ -312,6 +312,55 @@ was finished against, in `localStorage`. Both are stored because "done" and
 recomputed, since working it out means *dealing* every level, which is several
 seconds of work to color a grid of numbers.
 
+## On a phone
+
+The site is wrapped for iOS and Android with **Capacitor**, the same way the
+sort game is. `android/` and `ios/` are checked in.
+
+```
+npm run sync          # rebuild js/, gather www/, and copy it into both projects
+npx cap open android  # then Build > Generate Signed Bundle / APK
+npx cap open ios      # then Product > Archive
+```
+
+`npm run sync` rebuilds before it copies, on purpose: running `cap sync`
+against a stale `www/` ships whatever the last build left behind, silently,
+and only on the phone.
+
+**There is no IPA or APK in the repository, and there cannot be.** An `.ipa`
+needs Xcode and a macOS machine plus an Apple Developer signing identity; an
+`.apk` or `.aab` needs the Android SDK and a keystore. Both are signing steps
+tied to accounts, which is exactly the sort of thing that should not live in a
+git repository. The projects here are ready to open; the button is yours to
+press.
+
+`www/` is generated and gitignored. It exists because Capacitor copies its
+`webDir` wholesale into the bundle, and this repository's web root is the
+repository — pointing it there would ship the TypeScript, the tests and every
+dependency inside the app.
+
+## Fitting the screen
+
+Nothing scrolls that should not, and nothing is ever cut off.
+
+Those are different problems and the second is worse. A screen that scrolls at
+least tells you there is more; a screen that clips just quietly has no Play
+button on it. Measured across seven window sizes from a 320×568 phone to a
+1280×800 desktop, the home screen was losing 216px, the calendar 46px and, in
+landscape, three screens between them were hiding up to 272px of themselves.
+
+So the lockup, the cards and the calendar are sized against the **shorter** of
+the two axes — `min(9vw, 7.4vh)` rather than `9vw`, all the way down — which
+is what stops a title that is fine on a tall phone from filling the screen on
+the same phone turned sideways. Every screen now fits exactly at every size
+tested, portrait and landscape, with one exception: a phone held sideways
+(844×390) still runs about 20px over on the calendar. That one scrolls rather
+than clips.
+
+Text selection is off everywhere. None of it is text anybody wants to copy,
+and a long-press selecting the word under a finger — or a drag across the
+board painting half the cells — is only ever an accident.
+
 ## The parts
 
 The repository root **is** the website. Pages serves this branch's root
@@ -326,6 +375,7 @@ from, and `git push` is the deploy.
 | `src/play.ts` | The rules: what the blob is, what a move does, undo. |
 | `src/levels.ts` | The five settings per game, and which puzzle today's is. |
 | `src/campaign.ts` | The hand-drawn levels and the ramp behind them. |
+| `android/`, `ios/` | Capacitor projects, ready to open in Android Studio and Xcode. |
 | `src/palette.ts` | What a color index looks like. The generator never sees it. |
 | `src/app.ts` | The browser build. The only file in `src/` that knows a DOM exists. |
 | `src/cli.ts` | Deals a board and prints it to a terminal. |
@@ -456,10 +506,30 @@ compiled. Long enough that a button which simply did not respond would read as
 broken, so it says *Thinking…* first — after a paint, not merely after a
 `requestAnimationFrame`, which runs before one.
 
-The daily's setting depends on the day of the week, so the week has a shape to
-it: a gentle start and the two hardest settings at the weekend. A streak is
-kept in `localStorage` and nowhere else, so it is per-browser and per-device,
-and clearing site data clears it.
+### The daily
+
+A calendar, not a button. Every day since the first has its own puzzle, and
+you can go back and play any of them — the board comes from the date, so a day
+from last month deals exactly what it dealt then.
+
+The week ramps: Monday is the gentlest, Sunday the hardest, and the two games
+alternate the whole way down so no two days running are the same shape. All
+but one, and it cannot be helped — seven is odd, so any two-game cycle over a
+week has to repeat somewhere. The repeat sits at the Sunday-to-Monday seam,
+between the hardest puzzle of one week and the gentlest of the next, where it
+reads least like one.
+
+**Streaks are worked out from the days actually solved, not counted up as they
+happen.** A stored counter has to be nudged at exactly the right moments —
+once a day, not twice, not on a replay, and not when the clock crosses
+midnight mid-puzzle — and every one of those is a chance to be wrong in a way
+nobody can check. Derived, it is simply what the record says. A run ending
+*yesterday* still counts, because a streak is not broken until a day passes
+unplayed, and telling somebody at breakfast that their streak is zero would be
+both wrong and unkind.
+
+The record lives in `localStorage` and nowhere else, so it is per-browser and
+per-device, and clearing site data clears it.
 
 Tapping a **cell** plays that cell's color, which on a phone is much the
 fastest way in — you point at the region you want rather than hunting for it
