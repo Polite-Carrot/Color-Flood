@@ -31,19 +31,33 @@ jobs:
         with:
           enablement: true
 
-      # And then say it again, plainly. configure-pages reports success on a
-      # repository whose source is already set to a branch without changing
-      # it — enablement only covers the case where there is no Pages site at
-      # all. The observable result was two deployments per push, the branch
-      # build landing second, and README.md at the URL.
+      # Ask for the source to be this workflow rather than a branch, and do
+      # not care if the answer is no.
       #
-      # Idempotent: once the build type is `workflow` this is a no-op, and it
-      # is left in rather than run once by hand so that a fork, a rename or a
-      # repository restored from a backup lands on its feet.
-      - name: Serve Pages from this workflow, not from the branch
+      # configure-pages above reports success on a repository already pointed
+      # at a branch without changing anything — its `enablement` only covers
+      # the case where there is no Pages site at all. So this asks directly.
+      # It usually fails: changing the Pages source is a repository SETTING,
+      # settings need admin, and GITHUB_TOKEN has no administration
+      # permission to grant — there is no `permissions:` key that would let
+      # it. A person with admin has to do it once, in
+      # Settings -> Pages -> Source -> GitHub Actions.
+      #
+      # It stays here anyway because it costs nothing and it does work where
+      # the token is allowed to. What it must never do is take the deploy
+      # down with it, which is exactly what it did when it was written
+      # without the `|| true` — the build and deploy steps were skipped and
+      # the site stopped updating at all.
+      - name: Ask Pages to serve this workflow, not the branch
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh api -X PUT "repos/${{ github.repository }}/pages" -f build_type=workflow
+        run: |
+          gh api -X PUT "repos/${{ github.repository }}/pages" \
+            -f build_type=workflow \
+            && echo "Pages now serves this workflow's artifact." \
+            || echo "::warning::Could not set the Pages source (needs repo admin)." \
+                    "If the site shows README.md, set Settings -> Pages -> Source" \
+                    "to GitHub Actions by hand."
 
       - uses: actions/setup-node@v4
         with:
