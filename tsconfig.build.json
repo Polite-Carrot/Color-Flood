@@ -25,5 +25,8 @@
     "rootDir": "src",
     "sourceMap": false
   },
-  "exclude": ["src/generator.test.ts", "src/play.test.ts", "src/cli.ts"]
+  /* A PATTERN, not a list of files. Naming them one by one meant that adding
+     campaign.test.ts shipped it to the website — the tests are not part of
+     the game and have no business in js/. */
+  "exclude": ["src/**/*.test.ts", "src/cli.ts"]
 }

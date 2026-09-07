@@ -11,6 +11,7 @@ import { bestMove, generate } from "./generator.js";
 import { colour, ink, MAX_PALETTE } from "./palette.js";
 import { blobOf, blobColour, canPlay, movesLeft, play, restart, start, undo, won } from "./play.js";
 import { MODES, dailySeed, dailySetting, dayKey, modeLabel, optionsFor, settingFor, settingsFor, } from "./levels.js";
+import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from "./campaign.js";
 /* ------------------------------------------------------------------ scaffolding */
 const $ = (id) => {
     const el = document.getElementById(id);
@@ -25,9 +26,30 @@ function show(screen) {
 }
 function openOverlay(id) { $(id).hidden = false; }
 function closeOverlay(id) { $(id).hidden = true; }
+const blankRun = () => new Array(CAMPAIGN_LENGTH).fill(0);
+const blankProgress = () => ({ best: blankRun(), par: blankRun() });
 const DEFAULTS = {
     marks: true, streak: 0, best: 0, total: 0, lastDay: '', difficulty: 'easy', mode: 'flood',
+    progress: { flood: blankProgress(), merge: blankProgress() },
 };
+/* Read a saved campaign back defensively. A run that is the wrong length —
+   an older save, or a newer one from a longer campaign — is padded or cut
+   rather than thrown away, because losing somebody's progress is a worse
+   outcome than carrying a stale entry. */
+function readRun(got) {
+    const out = blankRun();
+    if (!Array.isArray(got))
+        return out;
+    for (let i = 0; i < out.length && i < got.length; i++) {
+        const n = Number(got[i]);
+        out[i] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+    }
+    return out;
+}
+function readProgress(got) {
+    const from = (got ?? {});
+    return { best: readRun(from.best), par: readRun(from.par) };
+}
 const KEY = 'color-flood/v1';
 function load() {
     try {
@@ -43,6 +65,10 @@ function load() {
             lastDay: typeof got.lastDay === 'string' ? got.lastDay : '',
             difficulty: typeof got.difficulty === 'string' ? got.difficulty : DEFAULTS.difficulty,
             mode: got.mode === 'merge' ? 'merge' : DEFAULTS.mode,
+            progress: {
+                flood: readProgress(got.progress?.flood),
+                merge: readProgress(got.progress?.merge),
+            },
         };
     }
     catch {
@@ -74,6 +100,10 @@ let cells = [];
    cells, because rebuilding 225 elements a move throws away the animation and
    the browser's own layout work along with it. */
 function buildBoard(level) {
+    /* Only the keys that do something. On a two-colour teaching board, telling
+       somebody about keys 1 to 6 is telling them about four keys that do
+       nothing. */
+    $('keys-colors').textContent = level.palette > 1 ? '1–' + level.palette : '1';
     const board = $('board');
     board.replaceChildren();
     board.style.gridTemplateColumns = 'repeat(' + level.width + ', 1fr)';
@@ -204,6 +234,10 @@ function paintStats() {
     if (!session)
         return;
     const { game } = session;
+    /* A campaign level has a next level, not a next deal. Offering "New puzzle"
+       there is offering to leave the campaign, which is not what the button
+       beside Undo and Restart looks like it does. */
+    $('again').hidden = session.campaign !== null;
     const used = game.played.length;
     const left = game.level.moveLimit - used;
     $('stat-moves').textContent = String(used);
@@ -314,10 +348,20 @@ function runHint() {
 function finish() {
     if (!session)
         return;
-    const { game, kind, setting, day } = session;
+    const { game, kind, setting, day, campaign } = session;
     const used = game.played.length;
     if (kind === 'daily')
         recordDaily(day);
+    if (campaign) {
+        const run = saved.progress[campaign.mode];
+        /* Keep the best, so replaying a level worse than before does not undo the
+           gold tile. */
+        if (run.best[campaign.n - 1] === 0 || used < run.best[campaign.n - 1]) {
+            run.best[campaign.n - 1] = used;
+        }
+        run.par[campaign.n - 1] = game.level.par;
+        save();
+    }
     const par = game.level.par;
     $('win-swatch').style.background = colour(blobColour(game)).hex;
     $('win-title').textContent = used === par ? 'Par!' : 'Flooded!';
@@ -327,8 +371,22 @@ function finish() {
             (used - par === 1 ? 'One move off the best line.' : (used - par) + ' moves off the best line.');
     $('win-note').textContent = kind === 'daily'
         ? 'Daily streak: ' + saved.streak + (saved.streak === saved.best && saved.best > 1 ? ' — your best yet.' : '')
-        : setting.label + ' · seed ' + game.level.seed;
-    $('win-again').textContent = kind === 'daily' ? 'Random puzzle' : 'New puzzle';
+        : campaign ? modeLabel(campaign.mode) + ' level ' + campaign.n
+            : setting.label + ' · seed ' + game.level.seed;
+    const next = $('win-next');
+    const again = $('win-again');
+    if (campaign) {
+        next.hidden = campaign.n >= CAMPAIGN_LENGTH;
+        again.hidden = true;
+        $('win-note').textContent = campaign.n >= CAMPAIGN_LENGTH
+            ? 'That is the last of them. ' + modeLabel(campaign.mode) + ' finished.'
+            : ($('win-note').textContent ?? '');
+    }
+    else {
+        next.hidden = true;
+        again.hidden = false;
+        again.textContent = kind === 'daily' ? 'Random puzzle' : 'New puzzle';
+    }
     openOverlay('overlay-win');
     say('Flooded in ' + used + '.', 'is-good');
 }
@@ -360,7 +418,9 @@ function begin(kind, setting, seed, day) {
         show('screen-home');
         return;
     }
-    session = { game: start(level), kind, setting, day, hintsLeft: HINTS, hinted: -1 };
+    session = {
+        game: start(level), kind, setting, day, campaign: null, hintsLeft: HINTS, hinted: -1,
+    };
     $('level-name').textContent = kind === 'daily' ? 'Daily Puzzle' : modeLabel(setting.mode);
     /* Par belongs here rather than in the stats row: it does not change while
        you play, and the row beside it is for the two numbers that do. */
@@ -372,6 +432,7 @@ function begin(kind, setting, seed, day) {
        back to sizing itself to its own letters — a 7×7 board about a fifth of
        the width it should be. */
     show('screen-game');
+    $('brief').textContent = '';
     buildBoard(level);
     paint();
     /* Size it once more now the picker exists. buildBoard measures the room
@@ -399,6 +460,42 @@ function dealing(button, work) {
             button.textContent = was;
         }
     }, 0));
+}
+/* A campaign level is unlocked once the one before it has been finished.
+   Level 1 always is. */
+function unlocked(mode, n) {
+    return n === 1 || saved.progress[mode].best[n - 2] > 0;
+}
+function playCampaign(mode, n, button) {
+    dealing(button, () => {
+        let entry;
+        try {
+            entry = campaignLevel(mode, n);
+        }
+        catch (err) {
+            say('Could not deal level ' + n + ': ' + err.message, 'is-warn');
+            return;
+        }
+        const setting = campaignSetting(mode, n);
+        show('screen-game');
+        session = {
+            game: start(entry.level),
+            kind: 'campaign',
+            setting,
+            day: '',
+            campaign: { mode, n },
+            hintsLeft: HINTS,
+            hinted: -1,
+        };
+        $('level-name').textContent = modeLabel(mode) + ' ' + n;
+        $('level-sub').textContent = entry.name + ' · ' + entry.level.width + '×' +
+            entry.level.height + ' · par ' + entry.level.par;
+        $('brief').textContent = entry.brief;
+        buildBoard(entry.level);
+        paint();
+        sizeBoard();
+        say('');
+    });
 }
 function dealRandom(button) {
     const setting = settingFor(saved.mode, saved.difficulty);
@@ -463,6 +560,45 @@ function paintRandomScreen() {
         ticks.children[i].classList.toggle('is-on', i === index);
     }
 }
+function showLevels(mode) {
+    const run = saved.progress[mode];
+    const done = run.best.filter((m) => m > 0).length;
+    const atPar = run.best.filter((m, i) => m > 0 && m === run.par[i]).length;
+    $('levels-heading').textContent = modeLabel(mode);
+    $('levels-note').textContent =
+        done + ' of ' + CAMPAIGN_LENGTH + ' done' + (atPar ? ' · ' + atPar + ' at par' : '');
+    const grid = $('level-grid');
+    grid.replaceChildren();
+    for (let n = 1; n <= CAMPAIGN_LENGTH; n++) {
+        const item = document.createElement('li');
+        const tile = document.createElement('button');
+        tile.type = 'button';
+        tile.className = 'tile';
+        tile.disabled = !unlocked(mode, n);
+        const number = document.createElement('span');
+        number.textContent = String(n);
+        const mark = document.createElement('span');
+        mark.className = 'tile__mark';
+        tile.append(number, mark);
+        const best = run.best[n - 1];
+        if (best > 0) {
+            const par = run.par[n - 1];
+            tile.classList.add(par > 0 && best <= par ? 'is-par' : 'is-done');
+            mark.textContent = String(best);
+            tile.setAttribute('aria-label', 'Level ' + n + ', done in ' + best + ' moves' + (par > 0 ? ', par ' + par : ''));
+        }
+        else if (tile.disabled) {
+            tile.setAttribute('aria-label', 'Level ' + n + ', locked');
+        }
+        else {
+            tile.setAttribute('aria-label', 'Level ' + n);
+        }
+        tile.addEventListener('click', () => playCampaign(mode, n, tile));
+        item.append(tile);
+        grid.append(item);
+    }
+    show('screen-levels');
+}
 function paintDailyScreen() {
     const now = new Date();
     const setting = dailySetting(now);
@@ -483,12 +619,21 @@ function paintDailyScreen() {
 }
 /* ------------------------------------------------------------------ wiring */
 function wire() {
+    $('go-flood').addEventListener('click', () => showLevels('flood'));
+    $('go-merge').addEventListener('click', () => showLevels('merge'));
     $('go-random').addEventListener('click', () => { paintRandomScreen(); show('screen-random'); });
     $('go-daily').addEventListener('click', () => { paintDailyScreen(); show('screen-daily'); });
     for (const btn of document.querySelectorAll('[data-home]')) {
         btn.addEventListener('click', () => show('screen-home'));
     }
-    $('back').addEventListener('click', () => show('screen-home'));
+    /* Back out of a campaign level to its grid rather than to the home screen —
+       the next thing wanted after level 12 is almost always level 13. */
+    $('back').addEventListener('click', () => {
+        if (session?.campaign)
+            showLevels(session.campaign.mode);
+        else
+            show('screen-home');
+    });
     $('difficulty').addEventListener('input', (e) => {
         const list = settingsFor(saved.mode);
         saved.difficulty = list[Number(e.target.value)].key;
@@ -518,7 +663,19 @@ function wire() {
         closeOverlay('overlay-win');
         dealRandom($('again'));
     });
-    $('win-home').addEventListener('click', () => { closeOverlay('overlay-win'); show('screen-home'); });
+    $('win-next').addEventListener('click', () => {
+        closeOverlay('overlay-win');
+        if (session?.campaign) {
+            playCampaign(session.campaign.mode, session.campaign.n + 1, $('win-next'));
+        }
+    });
+    $('win-home').addEventListener('click', () => {
+        closeOverlay('overlay-win');
+        if (session?.campaign)
+            showLevels(session.campaign.mode);
+        else
+            show('screen-home');
+    });
     $('how-to').addEventListener('click', () => openOverlay('overlay-howto'));
     $('settings').addEventListener('click', () => { paintSettings(); openOverlay('overlay-settings'); });
     for (const btn of document.querySelectorAll('[data-close]')) {
@@ -539,6 +696,11 @@ function wire() {
         paintSettings();
         $('settings-note').textContent = 'Streak reset.';
     });
+    $('set-wipe').addEventListener('click', () => {
+        saved.progress = { flood: blankProgress(), merge: blankProgress() };
+        save();
+        $('settings-note').textContent = 'Both campaigns reset to level 1.';
+    });
     window.addEventListener('keydown', (e) => {
         if (!$('overlay-win').hidden || !$('overlay-howto').hidden || !$('overlay-settings').hidden) {
             if (e.key === 'Escape') {
@@ -550,7 +712,7 @@ function wire() {
         if (!$('screen-game').classList.contains('is-active'))
             return;
         if (e.key === 'Escape')
-            return show('screen-home');
+            return void $('back').click();
         if (e.key === 'u' || e.key === 'U')
             return void $('undo').click();
         if (e.key === 'h' || e.key === 'H')

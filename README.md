@@ -16,10 +16,12 @@ room; the hardest give you par exactly.
 
 Two games. **Flood** starts in one corner. **Merge** starts in two opposite
 corners and one color steers both at once — they become one blob the moment
-they touch. A daily puzzle that is the same board for everybody, and random
-ones at five sizes each. Every level is generated in the page: nothing is
-fetched, nothing is stored on a server, and the whole site is a few files of
-plain ES modules.
+they touch.
+
+A hundred levels of each in order, a daily puzzle that is the same board for
+everybody, and random ones at five sizes. Every level is generated in the
+page: nothing is fetched, nothing is stored on a server, and the whole site is
+a few files of plain ES modules.
 
 ## Where the levels come from
 
@@ -240,6 +242,76 @@ The middle of a board comes out genuinely blobby; the last band or two,
 against the far edge, is thin whatever anyone does. That one is geometry, not
 a setting.
 
+## The campaigns
+
+A hundred levels each, in order, unlocking one at a time. **The first five of
+each are drawn by hand** and teach one rule apiece; everything after is a
+seeded deal on a board that widens as you go.
+
+The whole campaign is a *function*, not a file. Level 87 is worked out from
+the number 87, so there is no megabyte of pre-generated boards to ship, and it
+deals the same board on every device and will still deal it next year. All 200
+levels generate in about six seconds, which is cheap enough that **a test
+deals every one of them on every push** — a level that cannot be generated is
+a wall a player hits with no way past and no message worth reading.
+
+### The five that are drawn
+
+| Flood | Teaches |
+|---|---|
+| 1. Your corner | The blob is your corner plus everything touching it that matches |
+| 2. One band at a time | You can only take what you are touching |
+| 3. Only what touches | A color that touches nothing wastes the move |
+| 4. The big one is not always right | Greedy costs you a move here — par 3, greedy 4 |
+| 5. Par exactly | From here on, no moves spare |
+
+| Merge | Teaches |
+|---|---|
+| 1. Two corners | You hold two corners; one color moves both |
+| 2. Both at once | Every move recolors both, helpful or not |
+| 3. They join when they touch | They are always the same color, so nothing is needed to merge them |
+| 4. Suits one, not the other | Every move is a compromise between the ends |
+| 5. Par exactly | The real game, from both corners |
+
+Two things about these are worth knowing, because both are the kind of mistake
+that would ship quietly.
+
+**Par is not written next to the board.** It is searched for, from the board,
+every time. A par typed by hand can be wrong, and it would be wrong *silently*
+— the level would still play, it would just be impossible or a gift. The
+boards are a few dozen cells and settle in well under a millisecond, so there
+is nothing to save by trusting a number. A test then pins the expected par of
+each, so an edit to a grid that changes its lesson fails rather than sliding
+through.
+
+**Flood 4 has to actually lose.** Its whole claim is that taking the biggest
+patch costs a move, so a test asserts `greedy` needs 4 where par is 3. The
+first version of that board did not: greedy matched par, and it was teaching
+nothing while looking exactly as if it were.
+
+The drawn boards also have to use a run of colors from the start of the
+palette with no gaps — the picker shows one swatch per color in the palette,
+so a hole means offering a color that appears nowhere on the board, on the
+levels whose entire job is teaching what a move does. `campaign.ts` throws if
+a board leaves one, and a test checks all ten.
+
+### The ramp
+
+Everything after level five interpolates: the board widens, the palette fills,
+the construction deepens, and the moves you get over par run out — three
+spare at the start, none by the end, sawing rather than sliding so the
+campaign breathes. No table, because a hundred rows is a hundred chances to
+fumble one and no way to see the shape.
+
+Merge tops out at 11×11 where Flood reaches 16×16, for the same reason it does
+on the Random screen: two fronts make par dear to find.
+
+Progress is the fewest moves each level has been finished in, and the par it
+was finished against, in `localStorage`. Both are stored because "done" and
+"done at par" are worth telling apart — and par is stored rather than
+recomputed, since working it out means *dealing* every level, which is several
+seconds of work to color a grid of numbers.
+
 ## The parts
 
 The repository root **is** the website. Pages serves this branch's root
@@ -252,14 +324,15 @@ from, and `git push` is the deploy.
 | `js/` | **Generated** from `src/` by `npm run build`. Committed, and never edited by hand. |
 | `src/generator.ts` | The generator and the solver. No imports, no DOM, no `Math.random`. |
 | `src/play.ts` | The rules: what the blob is, what a move does, undo. |
-| `src/levels.ts` | The five settings, and which puzzle today's is. |
+| `src/levels.ts` | The five settings per game, and which puzzle today's is. |
+| `src/campaign.ts` | The hand-drawn levels and the ramp behind them. |
 | `src/palette.ts` | What a color index looks like. The generator never sees it. |
 | `src/app.ts` | The browser build. The only file in `src/` that knows a DOM exists. |
 | `src/cli.ts` | Deals a board and prints it to a terminal. |
 
-`generator.ts`, `play.ts`, `levels.ts` and `palette.ts` are pure and none of
-them import anything but a type, which is the point: a React Native build
-takes those four as they are and writes its own version of `app.ts`. `generator.ts` in particular imports nothing at all,
+`generator.ts`, `play.ts`, `levels.ts`, `campaign.ts` and `palette.ts` are all
+pure — no DOM, no storage, no clock — which is the point: a React Native build
+takes those five as they are and writes its own version of `app.ts`. `generator.ts` in particular imports nothing at all,
 and a test enforces it — the check strips the comments first, because the
 comments discuss `Math.random` at some length and a check that reads them
 finds exactly what it was written to forbid.

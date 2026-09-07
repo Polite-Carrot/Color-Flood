@@ -25,6 +25,24 @@
     </header>
 
     <div class="choices">
+      <button id="go-flood" class="choice" type="button">
+        <span class="choice__flood" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span class="choice__body">
+          <span class="choice__name">Flood</span>
+          <span class="choice__sub" id="home-flood-sub">100 levels, from one corner</span>
+        </span>
+        <span class="choice__go" aria-hidden="true">&rsaquo;</span>
+      </button>
+
+      <button id="go-merge" class="choice" type="button">
+        <span class="choice__merge" aria-hidden="true"><i></i><i></i></span>
+        <span class="choice__body">
+          <span class="choice__name">Merge</span>
+          <span class="choice__sub" id="home-merge-sub">100 levels, from two corners at once</span>
+        </span>
+        <span class="choice__go" aria-hidden="true">&rsaquo;</span>
+      </button>
+
       <button id="go-daily" class="choice" type="button">
         <span class="choice__cal" aria-hidden="true">
           <i class="choice__cal-top"></i>
@@ -52,6 +70,19 @@
       <button id="how-to" class="btn btn--ghost">How to play</button>
       <button id="settings" class="btn btn--ghost">Settings</button>
     </footer>
+  </section>
+
+  <!-- ─────────────── levels ─────────────── -->
+  <section id="screen-levels" class="screen">
+    <header class="subhead">
+      <button data-home class="btn btn--ghost">&larr; Home</button>
+      <div class="subhead__title">
+        <h2 id="levels-heading">Flood</h2>
+        <span id="levels-note"></span>
+      </div>
+      <span class="subhead__balance" aria-hidden="true"></span>
+    </header>
+    <ol id="level-grid" class="level-grid"></ol>
   </section>
 
   <!-- ─────────────── random ─────────────── -->
@@ -121,6 +152,8 @@
       </div>
     </header>
 
+    <p id="brief" class="brief"></p>
+
     <div class="board-wrap">
       <div id="board" class="board" role="group" aria-label="Puzzle board"></div>
     </div>
@@ -135,7 +168,7 @@
     </div>
 
     <p id="status" class="status" role="status" aria-live="polite">&nbsp;</p>
-    <p class="keys">Keys: <b>1&ndash;6</b> colors &middot; <b>U</b> undo &middot; <b>H</b> hint &middot; <b>R</b> restart &middot; <b>Esc</b> menu</p>
+    <p class="keys">Keys: <b id="keys-colors">1&ndash;6</b> colors &middot; <b>U</b> undo &middot; <b>H</b> hint &middot; <b>R</b> restart &middot; <b>Esc</b> back</p>
   </section>
 
 </div>
@@ -148,6 +181,7 @@
     <p class="modal__line" id="win-line"></p>
     <p class="modal__note" id="win-note"></p>
     <div class="modal__actions">
+      <button id="win-next" class="btn btn--primary" hidden>Next level</button>
       <button id="win-again" class="btn btn--primary">New puzzle</button>
       <button id="win-home" class="btn">Home</button>
     </div>
@@ -184,6 +218,10 @@
       <div class="settings-row settings-row--danger">
         <span>Daily streak</span>
         <button id="set-reset" class="btn" type="button">Reset</button>
+      </div>
+      <div class="settings-row settings-row--danger">
+        <span>Campaign progress</span>
+        <button id="set-wipe" class="btn" type="button">Reset</button>
       </div>
     </div>
     <p class="modal__note" id="settings-note"></p>
