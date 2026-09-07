@@ -1,6 +1,6 @@
 /* app.ts — the browser build.
  *
- * The only file here that knows a DOM exists. Everything it needs to decide
+ * The only file in src/ that knows a DOM exists. Everything it needs to decide
  * what a board is, what a move does, or which puzzle today's is comes from
  * the four modules above it, all of which are pure and none of which import
  * anything — so a React Native build can take the same four and write its own
@@ -8,13 +8,13 @@
  *
  * No framework, no bundler, no build step beyond `tsc`. */
 
-import { generate, type Level } from '../generator.ts';
-import { colour, ink, MAX_PALETTE } from '../palette.ts';
+import { generate, type Level } from './generator.ts';
+import { colour, ink, MAX_PALETTE } from './palette.ts';
 import { blobOf, blobColour, canPlay, movesLeft, play, restart, start, undo, won, type Game }
-  from '../play.ts';
+  from './play.ts';
 import {
   SETTINGS, dailySeed, dailySetting, dayKey, optionsFor, settingFor, type Setting,
-} from '../levels.ts';
+} from './levels.ts';
 
 /* ------------------------------------------------------------------ scaffolding */
 

@@ -111,19 +111,24 @@ a setting.
 
 ## The parts
 
-| File | What it is |
+The repository root **is** the website. Pages serves this branch's root
+directly, so `index.html` and everything it loads sit where they are served
+from, and `git push` is the deploy.
+
+| Path | What it is |
 |------|------------|
+| `index.html`, `styles.css`, `fonts.css`, `assets/` | The page. Hand-written, and served as they are. |
+| `js/` | **Generated** from `src/` by `npm run build`. Committed, and never edited by hand. |
 | `src/generator.ts` | The generator and the solver. No imports, no DOM, no `Math.random`. |
 | `src/play.ts` | The rules: what the blob is, what a move does, undo. |
 | `src/levels.ts` | The five settings, and which puzzle today's is. |
 | `src/palette.ts` | What a color index looks like. The generator never sees it. |
-| `src/web/app.ts` | The browser build. The only file that knows a DOM exists. |
+| `src/app.ts` | The browser build. The only file in `src/` that knows a DOM exists. |
 | `src/cli.ts` | Deals a board and prints it to a terminal. |
-| `web/` | The page, its stylesheet, and the fonts. |
 
-The first four are pure and none of them import anything but a type, which is
-the point: a React Native build takes those four as they are and writes its
-own version of `app.ts`. `generator.ts` in particular imports nothing at all,
+`generator.ts`, `play.ts`, `levels.ts` and `palette.ts` are pure and none of
+them import anything but a type, which is the point: a React Native build
+takes those four as they are and writes its own version of `app.ts`. `generator.ts` in particular imports nothing at all,
 and a test enforces it — the check strips the comments first, because the
 comments discuss `Math.random` at some length and a check that reads them
 finds exactly what it was written to forbid.
@@ -157,68 +162,43 @@ breaking `Math.random` and dealing a board anyway.
 npm install
 npm test
 npm run gen -- --w 9 --h 7 --moves 3 --seed 2026-09-07   # a board in the terminal
-npm run build:web && npm run serve                        # the game, on :8080
+npm run build && npm run serve                            # the game, on :8080
 ```
 
-There is no bundler and no framework. `build:web` runs `tsc` over `src/` into
-plain ES modules and copies `web/` over the top; `index.html` loads
-`web/app.js` as a module and the browser follows the imports from there. The
-whole deployable site is about 390 KB, and 244 KB of that is the two fonts,
-inlined as data URIs so the page fetches nothing at all.
+There is no bundler and no framework. `npm run build` runs `tsc` over `src/`
+into `js/` as plain ES modules; `index.html` loads `js/app.js` as a module and
+the browser follows the imports from there. The whole site is about 390 KB,
+and 244 KB of that is the two fonts, inlined as data URIs so the page fetches
+nothing at all.
 
 The source imports say `./generator.ts`, which is what lets Node run the CLI
-and the tests straight from source with no build; `rewriteRelativeImportExtensions`
+and the tests straight from source with no build. `rewriteRelativeImportExtensions`
 turns them into `./generator.js` on the way out, which is what the browser
 needs. Both are true at once, and neither is a copy of the other.
 
-### Deploying
+## Deploying
 
-Pushing to `main` runs `.github/workflows/pages.yml`: typecheck, tests, build,
-publish. The tests are in front of the deploy rather than beside it, because a
-generator that deals an unsolvable board is not something a player can work
-around.
+`git push` to `main`. That is the whole of it — Pages serves this branch's
+root, so pushing the root publishes it.
 
-**Settings → Pages → Source must be set to GitHub Actions**, once, by
-somebody with admin on the repository. Nothing in a workflow can do it: the
-Pages source is a repository setting, settings need admin, and the workflow's
-`GITHUB_TOKEN` has no administration permission — there is no `permissions:`
-key that would grant one. The workflow asks anyway, and shrugs when it is
-refused.
+Which is why **`js/` is committed**, and that is worth being upfront about
+because generated files in git are normally a mistake. Publishing straight
+from a branch means there is no build step between the branch and the URL, so
+whatever the browser needs has to be *in* the branch. The alternative is
+setting the Pages source to GitHub Actions and letting a workflow build and
+upload — cleaner in git, one setting to get right, and that setting is admin
+only.
 
-It matters more than it sounds, because getting it wrong does not look like
-an error. The default source is "Deploy from a branch", which builds `main`
-with Jekyll — and Jekyll turns this file into the index and serves it. Both
-builds then run on every push and the branch build tends to land second and
-win. Every step of both runs reports success. The only symptom is this README
-at the game's URL.
+The cost of this way is drift: `js/` can fall behind `src/`, and a drifted
+`js/` is a stale game at the URL with a perfectly green repository behind it.
+So `.github/workflows/pages.yml` rebuilds on every push and fails if what is
+committed differs from what `src/` compiles to. **Run `npm run build` and
+commit `js/` whenever you change `src/`** — or CI will tell you that you
+forgot.
 
-If that is what you are looking at, the deployment history tells you so:
-each deployment names the app that made it, `github-actions` for this
-workflow and `github-pages` for the branch build, and the newest is what is
-live.
-
-    gh api "repos/OWNER/REPO/deployments?environment=github-pages" \
-      --jq '.[] | "\(.created_at)  \(.performed_via_github_app.slug)"'
-
-`gen` prints the board in color, each cell carrying its color's letter as well
-— set `NO_COLOR`, pass `--plain`, or pipe the output anywhere and it still
-reads.
-
-```
-  --w <n>        board width           (default 9)
-  --h <n>        board height          (default 7)
-  --moves <n>    intended par          (default 3)
-  --palette <n>  colors in play        (default 4, at most 10)
-  --seed <s>     any string            (default today's date)
-  --strand <p>   0..1, island chance   (default 0)
-  --solve        search for par and check it against the move limit
-  --plain        letters only, no color
-```
-
-`--solve` is the one worth knowing about: it runs the search and exits non-zero
-if the answer disagrees with the move limit on the level. That is the check
-that catches a change to the growth quietly breaking the construction, and it
-costs a millisecond.
+`.nojekyll` at the root turns off Jekyll. Without it Pages runs the tree
+through Jekyll on its way out, which among other things drops anything whose
+name begins with an underscore — a silent 404 rather than an error.
 
 ## The game
 

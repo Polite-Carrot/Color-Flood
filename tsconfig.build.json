@@ -1,19 +1,29 @@
 {
-  /* The web build. Emits plain ES modules — no bundler, no loader, nothing to
-     install on the page: index.html loads web/app.js as a module and the
-     browser follows the imports from there.
+  /* The published JavaScript. Emits plain ES modules into js/ — no bundler,
+     no loader, nothing to install on the page: index.html loads js/app.js as
+     a module and the browser follows the imports from there.
 
-     `rewriteRelativeImportExtensions` is what makes that work while the
-     source still says `./generator.ts`. The .ts specifier is what lets Node
-     run the CLI and the tests straight from source; the emitted JS needs
-     `./generator.js` or the browser 404s. This rewrites them on the way out
-     so both are true at once. */
+     js/ is COMMITTED, which is not how any of this normally goes. GitHub
+     Pages serves this repository's root branch directly, so the root has to
+     BE the site — there is no build step between the branch and the URL. The
+     price is generated files in git; the guard is a CI check that rebuilds
+     and fails if what is committed differs.
+
+     `rewriteRelativeImportExtensions` is what lets both halves be true at
+     once. The source says `./generator.ts`, which is what lets Node run the
+     CLI and the tests straight from source with no build; the emitted JS
+     needs `./generator.js` or the browser 404s. This rewrites them on the
+     way out.
+
+     No source maps on purpose: they would be four more generated files to
+     keep in step, and stripping the types leaves JavaScript close enough to
+     the TypeScript beside it that a stack trace reads fine without them. */
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": false,
-    "outDir": "dist",
+    "outDir": "js",
     "rootDir": "src",
-    "sourceMap": true
+    "sourceMap": false
   },
-  "exclude": ["src/generator.test.ts", "src/cli.ts"]
+  "exclude": ["src/generator.test.ts", "src/play.test.ts", "src/cli.ts"]
 }

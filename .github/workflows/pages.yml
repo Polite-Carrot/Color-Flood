@@ -1,63 +1,30 @@
-name: Deploy to GitHub Pages
+# The site is not deployed from here.
+#
+# GitHub Pages serves this repository's main branch at its root, so the root
+# IS the site and publishing is what `git push` already does. Nothing in this
+# workflow uploads anything.
+#
+# What it does instead is keep that arrangement honest. js/ is generated from
+# src/ and committed, which is the one real cost of publishing straight from
+# a branch: the two can drift, and a drifted js/ is a stale game at the URL
+# with a green repository behind it. So every push rebuilds and compares.
+
+name: Checks
 
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
-
-# Let a running deploy finish; queue at most one more behind it.
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      # Point Pages at this workflow's artifact. Without it the repository
-      # keeps whatever source it had — and the default, "Deploy from a
-      # branch", builds main with Jekyll, which turns README.md into the
-      # index and serves that instead of the game. Both builds run, the
-      # branch one lands second, and the deploy step here still reports
-      # success while nobody can see its output.
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
-      # Ask for the source to be this workflow rather than a branch, and do
-      # not care if the answer is no.
-      #
-      # configure-pages above reports success on a repository already pointed
-      # at a branch without changing anything — its `enablement` only covers
-      # the case where there is no Pages site at all. So this asks directly.
-      # It usually fails: changing the Pages source is a repository SETTING,
-      # settings need admin, and GITHUB_TOKEN has no administration
-      # permission to grant — there is no `permissions:` key that would let
-      # it. A person with admin has to do it once, in
-      # Settings -> Pages -> Source -> GitHub Actions.
-      #
-      # It stays here anyway because it costs nothing and it does work where
-      # the token is allowed to. What it must never do is take the deploy
-      # down with it, which is exactly what it did when it was written
-      # without the `|| true` — the build and deploy steps were skipped and
-      # the site stopped updating at all.
-      - name: Ask Pages to serve this workflow, not the branch
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh api -X PUT "repos/${{ github.repository }}/pages" \
-            -f build_type=workflow \
-            && echo "Pages now serves this workflow's artifact." \
-            || echo "::warning::Could not set the Pages source (needs repo admin)." \
-                    "If the site shows README.md, set Settings -> Pages -> Source" \
-                    "to GitHub Actions by hand."
 
       - uses: actions/setup-node@v4
         with:
@@ -66,24 +33,19 @@ jobs:
 
       - run: npm ci
 
-      # Don't ship a build that fails its own checks. The tests are worth
-      # having in front of the deploy rather than beside it: a generator that
-      # deals an unsolvable board is not something a player can work around.
       - run: npm run typecheck
       - run: npm test
 
-      - run: npm run build:web
+      # The published JavaScript has to be exactly what the committed
+      # TypeScript compiles to. Rebuild it and see whether anything moved.
+      - run: npm run build
 
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      - name: js/ must match src/
+        run: |
+          if [ -n "$(git status --porcelain -- js)" ]; then
+            echo "::error::js/ is out of date with src/. Run 'npm run build' and commit js/."
+            git status --short -- js
+            git --no-pager diff -- js
+            exit 1
+          fi
+          echo "js/ is in step with src/"

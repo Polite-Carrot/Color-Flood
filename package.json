@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "gen": "node --experimental-strip-types --no-warnings src/cli.ts",
-    "build:web": "node scripts/build-web.js",
-    "serve": "node --experimental-strip-types --no-warnings scripts/serve.js",
+    "build": "tsc -p tsconfig.build.json",
+    "serve": "node scripts/serve.js",
     "fonts": "node scripts/fetch-fonts.js",
     "test": "vitest run",
     "test:watch": "vitest",
