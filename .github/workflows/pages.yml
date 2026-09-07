@@ -49,3 +49,40 @@ jobs:
             exit 1
           fi
           echo "js/ is in step with src/"
+
+  # Everything above can pass on a site nobody can see. Twice now the
+  # repository has been entirely green while the URL served README.md — once
+  # because Pages was building the branch with Jekyll and there was no
+  # index.html at the root for it to find, and once because an artifact was
+  # being deployed to a site configured to serve something else. Neither
+  # showed up as a failure anywhere, because creating a deployment and
+  # SERVING it are different things and only the first is reported.
+  #
+  # So: fetch the actual URL and look at what comes back.
+  smoke:
+    if: github.event_name == 'push'
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - name: The URL must serve the game
+        run: |
+          owner="${{ github.repository_owner }}"
+          url="https://${owner,,}.github.io/${{ github.event.repository.name }}/"
+          echo "checking $url"
+          # Pages builds this branch in parallel with this workflow, so the
+          # new commit may not be live for a minute or two. Poll, don't guess.
+          for i in $(seq 1 30); do
+            body=$(curl -sSL --max-time 20 "$url" || true)
+            if printf '%s' "$body" | grep -q '<title>Color Flood</title>' &&
+               printf '%s' "$body" | grep -q 'js/app.js'; then
+              echo "the page is the game"
+              curl -sSfL --max-time 20 "${url}js/app.js" >/dev/null
+              echo "js/app.js loads"
+              exit 0
+            fi
+            echo "  attempt $i: not the game yet"
+            sleep 10
+          done
+          echo "::error::$url is not serving the game. First 40 lines of what it did serve:"
+          printf '%s' "$body" | head -40
+          exit 1
