@@ -428,36 +428,164 @@ function absorbPockets(w, h, layerOf, marked) {
     }
     return added;
 }
-/* ----------------------------------------------------------------- colours */
-/* One colour per layer. Touching layers must differ or a move would take two
-   layers at once and par would be a lie; layers two apart are kept apart as
-   well where the palette can afford it, because A-B-A-B-A reads as stripes
-   rather than as a board. Unused colours are preferred while any remain, so a
-   six-colour puzzle actually shows six colours. */
-function assignColours(layerCount, palette, rand) {
-    if (palette < 2)
-        throw new Error('palette must be at least 2 — touching layers have to differ');
-    const colours = new Array(layerCount + 1).fill(-1);
-    const used = new Uint8Array(palette);
+/* Cut every layer into patches of roughly `patchSize` cells. A patchSize of 0
+   leaves each layer whole, which is the original single-colour construction
+   and still what the CLI deals by default. */
+function splitIntoPatches(w, h, layerOf, layerCount, patchSize, rand) {
+    const n = w * h;
+    const patchAt = new Int32Array(n).fill(-1);
+    const layerOfPatch = [];
+    let count = 0;
+    const nb = [];
     for (let layer = 1; layer <= layerCount; layer++) {
-        const banned = layer > 1 ? colours[layer - 1] : -1;
-        const disliked = layer > 2 ? colours[layer - 2] : -1;
-        let pool = allowed(palette, banned, disliked);
-        if (!pool.length)
-            pool = allowed(palette, banned, -1);
-        const fresh = pool.filter((c) => !used[c]);
-        const pick = fresh.length ? fresh : pool;
-        colours[layer] = pick[randInt(rand, pick.length)];
-        used[colours[layer]] = 1;
+        const cells = [];
+        for (let i = 0; i < n; i++)
+            if (layerOf[i] === layer)
+                cells.push(i);
+        if (!cells.length)
+            throw new Error('layer ' + layer + ' is empty');
+        const wanted = patchSize > 0
+            ? Math.max(1, Math.min(cells.length, Math.round(cells.length / patchSize)))
+            : 1;
+        if (wanted === 1) {
+            const id = count++;
+            layerOfPatch.push(layer);
+            for (const i of cells)
+                patchAt[i] = id;
+            continue;
+        }
+        /* Seeds spread as far apart as the layer allows: take one at random, then
+           repeatedly take whichever cell is furthest from every seed so far,
+           measuring distance THROUGH the layer rather than across the board. Seeds
+           picked at random instead cluster, and a clustered seed produces a patch
+           of two cells beside one of thirty. */
+        const seeds = [cells[randInt(rand, cells.length)]];
+        const far = new Int32Array(n).fill(-1);
+        while (seeds.length < wanted) {
+            far.fill(-1);
+            const queue = seeds.slice();
+            for (const sd of seeds)
+                far[sd] = 0;
+            for (let q = 0; q < queue.length; q++) {
+                for (const j of neighbours(queue[q], w, h, nb)) {
+                    if (far[j] >= 0 || layerOf[j] !== layer)
+                        continue;
+                    far[j] = far[queue[q]] + 1;
+                    queue.push(j);
+                }
+            }
+            let pick = -1;
+            let best = 0;
+            for (const i of cells)
+                if (far[i] > best) {
+                    best = far[i];
+                    pick = i;
+                }
+            if (pick < 0)
+                break; /* every cell already a seed */
+            seeds.push(pick);
+        }
+        /* Grow them together, a cell each in turn, so the patches come out
+           comparable in size rather than the first one taking the layer. */
+        const ids = seeds.map(() => { layerOfPatch.push(layer); return count++; });
+        const fronts = seeds.map((sd, k) => { patchAt[sd] = ids[k]; return [sd]; });
+        let placed = seeds.length;
+        while (placed < cells.length) {
+            let moved = false;
+            for (let k = 0; k < fronts.length; k++) {
+                const front = fronts[k];
+                while (front.length) {
+                    const cell = front[randInt(rand, front.length)];
+                    const at = front.indexOf(cell);
+                    front[at] = front[front.length - 1];
+                    front.pop();
+                    let took = false;
+                    for (const j of neighbours(cell, w, h, nb)) {
+                        if (patchAt[j] >= 0 || layerOf[j] !== layer)
+                            continue;
+                        patchAt[j] = ids[k];
+                        front.push(j);
+                        placed++;
+                        took = true;
+                        break;
+                    }
+                    if (took) {
+                        front.push(cell);
+                        moved = true;
+                        break;
+                    }
+                }
+            }
+            /* Nothing grew: whatever is left cannot be reached from any seed, which
+               cannot happen while layers are connected. Belt and braces. */
+            if (!moved)
+                break;
+        }
+        for (const i of cells)
+            if (patchAt[i] < 0)
+                patchAt[i] = ids[0];
+    }
+    return { patchAt, layerOfPatch, colours: [], count };
+}
+/* Colour the patches so no two that touch match.
+ *
+ * Touching patches have to differ or they are not two patches — they would
+ * merge into one region and one move would take both, which is the thing this
+ * is here to prevent. Patches that do NOT touch are free to share, which is
+ * what lets a board of forty patches run on five colours.
+ *
+ * Ordinary greedy graph colouring, in a random order, choosing at random from
+ * whatever is still allowed. The board's patch graph is planar, so five
+ * colours always suffice and four nearly always do; below that it can genuinely
+ * get stuck, and a stuck board is dealt again rather than fudged. */
+function colourPatches(w, h, patches, palette, rand) {
+    if (palette < 2)
+        throw new Error('palette must be at least 2 — touching patches have to differ');
+    const n = w * h;
+    const nb = [];
+    const touching = [];
+    for (let p = 0; p < patches.count; p++)
+        touching.push(new Set());
+    for (let i = 0; i < n; i++) {
+        for (const j of neighbours(i, w, h, nb)) {
+            const a = patches.patchAt[i];
+            const b = patches.patchAt[j];
+            if (a !== b) {
+                touching[a].add(b);
+                touching[b].add(a);
+            }
+        }
+    }
+    const order = [];
+    for (let p = 0; p < patches.count; p++)
+        order.push(p);
+    for (let i = order.length - 1; i > 0; i--) {
+        const j = randInt(rand, i + 1);
+        const t = order[i];
+        order[i] = order[j];
+        order[j] = t;
+    }
+    const colours = new Array(patches.count).fill(-1);
+    const used = new Uint8Array(palette);
+    for (const p of order) {
+        const taken = new Set();
+        for (const q of touching[p])
+            if (colours[q] >= 0)
+                taken.add(colours[q]);
+        const free = [];
+        for (let c = 0; c < palette; c++)
+            if (!taken.has(c))
+                free.push(c);
+        if (!free.length)
+            throw new Regenerate('patch ' + p + ' has no colour left');
+        /* Prefer a colour nothing has used yet, so a six-colour board shows six
+           colours rather than settling on the first three. */
+        const fresh = free.filter((c) => !used[c]);
+        const pool = fresh.length ? fresh : free;
+        colours[p] = pool[randInt(rand, pool.length)];
+        used[colours[p]] = 1;
     }
     return colours;
-}
-function allowed(palette, banned, disliked) {
-    const out = [];
-    for (let c = 0; c < palette; c++)
-        if (c !== banned && c !== disliked)
-            out.push(c);
-    return out;
 }
 /* --------------------------------------------------------------- invariant */
 /* The construction is only worth anything if it actually held, so it is
@@ -492,6 +620,38 @@ export function assertLayerInvariants(width, height, layers, layerCount) {
         }
     }
 }
+/* Patches have their own two things to be true, and both would show up as a
+   puzzle that is wrong rather than as a crash. A patch in two pieces is two
+   patches wearing one name, and the second piece is unreachable board. Two
+   touching patches sharing a colour are one region, so a move takes both and
+   par is lower than the search was told. */
+export function assertPatchInvariants(width, height, patchAt, colours) {
+    const w = width;
+    const h = height;
+    const flat = new Int32Array(w * h);
+    for (let r = 0; r < h; r++)
+        for (let c = 0; c < w; c++)
+            flat[r * w + c] = patchAt[r][c];
+    const counted = new Set(Array.from(flat));
+    for (const p of counted) {
+        const pieces = components(w, h, (i) => flat[i] === p);
+        if (pieces.length > 1) {
+            throw new Error('patch ' + p + ' is in ' + pieces.length + ' pieces, not one region');
+        }
+    }
+    const nb = [];
+    for (let i = 0; i < w * h; i++) {
+        for (const j of neighbours(i, w, h, nb)) {
+            if (flat[i] === flat[j])
+                continue;
+            if (colours[flat[i]] === colours[flat[j]]) {
+                const r = (i / w) | 0;
+                throw new Error('patches ' + flat[i] + ' and ' + flat[j] + ' touch at [' + r + ',' + (i % w) +
+                    '] and share colour ' + colours[flat[i]] + ' — they are one region, not two');
+            }
+        }
+    }
+}
 /* --------------------------------------------------------------- stranding */
 /* An island of an earlier layer's colour, dropped inside the interior of a
    later one. The player reaches it with the board already conquered around
@@ -508,7 +668,7 @@ export function assertLayerInvariants(width, height, layers, layerCount) {
    Only interior cells are repainted: a cell whose four neighbours are all the
    same layer. An island touching the edge of its layer would be picked up by
    the ordinary sweep and cost nothing. */
-function strand(w, h, layerOf, grid, colours, layerCount, chance, rand) {
+function strand(w, h, layerOf, grid, layerCount, chance, rand) {
     if (chance <= 0)
         return 0;
     const nb = [];
@@ -517,13 +677,16 @@ function strand(w, h, layerOf, grid, colours, layerCount, chance, rand) {
         if (rand() >= chance)
             continue;
         const host = layer + 2;
-        /* Two layers apart may share a colour on a small palette, and then the
-           island is invisible and free. */
-        if (colours[layer] === colours[host])
-            continue;
+        /* Interior cells of the host layer: every neighbour in the same layer,
+           and not against the board's edge, which has fewer than four neighbours
+           and so is never interior however its neighbours are coloured. */
         const interior = [];
         for (let i = 0; i < w * h; i++) {
-            if (layerOf[i] !== host || grid[i] !== colours[host])
+            if (layerOf[i] !== host)
+                continue;
+            const r = (i / w) | 0;
+            const c = i % w;
+            if (r === 0 || c === 0 || r === h - 1 || c === w - 1)
                 continue;
             let inside = true;
             for (const j of neighbours(i, w, h, nb))
@@ -531,53 +694,189 @@ function strand(w, h, layerOf, grid, colours, layerCount, chance, rand) {
                     inside = false;
                     break;
                 }
-            /* A cell on the board's own edge has fewer than four neighbours and is
-               not interior however its neighbours are coloured. */
-            const r = (i / w) | 0;
-            const c = i % w;
-            if (r === 0 || c === 0 || r === h - 1 || c === w - 1)
-                inside = false;
             if (inside)
                 interior.push(i);
         }
         if (!interior.length)
             continue;
+        const seed = interior[randInt(rand, interior.length)];
+        /* The island wears a colour from two layers back. Taken off the grid
+           rather than off a per-layer list, because a layer is not one colour any
+           more — it is however many patches were cut from it. */
+        const wearing = [];
+        for (let i = 0; i < w * h; i++)
+            if (layerOf[i] === layer)
+                wearing.push(grid[i]);
+        const colour = wearing[randInt(rand, wearing.length)];
+        /* Same colour as its host is no island at all — it is invisible and free. */
+        if (colour === grid[seed])
+            continue;
         /* One to three cells: enough to be worth a move, small enough that it
-           cannot cut its host layer in half. */
+           cannot cut its host in half. */
         const want = 1 + randInt(rand, 3);
-        const clump = [interior[randInt(rand, interior.length)]];
+        const clump = [seed];
         const inClump = new Set(clump);
         for (let q = 0; q < clump.length && clump.length < want; q++) {
             for (const j of neighbours(clump[q], w, h, nb)) {
                 if (clump.length >= want)
                     break;
-                if (!inClump.has(j) && interior.includes(j)) {
+                if (!inClump.has(j) && interior.includes(j) && grid[j] !== colour) {
                     inClump.add(j);
                     clump.push(j);
                 }
             }
         }
         for (const i of clump)
-            grid[i] = colours[layer];
+            grid[i] = colour;
         islands++;
     }
     return islands;
 }
-/* ------------------------------------------------------------------- solve */
-/* Fewest moves from where the board stands, by breadth-first search over
-   positions, memoised on the grid itself so a position reached two ways is
-   only expanded once.
-   
-   The one pruning rule: only colours already touching the blob are worth
-   playing. Recolouring to anything else cannot grow the blob, so the move
-   changes nothing but the blob's own colour — and whatever you were going to
-   play next, you could have played instead. It can never come out ahead, and
-   dropping it is what keeps the branching down to the handful of colours on
-   the blob's edge rather than the whole palette.
-   
-   Returns null rather than a number if the cap is reached. Boards from
-   `generate` are settled in a few hundred states; the cap is there for a
-   board handed in from somewhere else. */
+function regionsOf(g, w, h) {
+    const n = w * h;
+    const regionAt = new Int32Array(n).fill(-1);
+    const colours = [];
+    const sizes = [];
+    const neighbours = [];
+    const nb = [];
+    const queue = new Int32Array(n);
+    let count = 0;
+    for (let seed = 0; seed < n; seed++) {
+        if (regionAt[seed] >= 0)
+            continue;
+        const colour = g[seed];
+        const id = count++;
+        regionAt[seed] = id;
+        let size = 1;
+        queue[0] = seed;
+        for (let q = 0; q < size; q++) {
+            for (const j of neighbours2(queue[q], w, h, nb)) {
+                if (regionAt[j] < 0 && g[j] === colour) {
+                    regionAt[j] = id;
+                    queue[size++] = j;
+                }
+            }
+        }
+        colours.push(colour);
+        sizes.push(size);
+        neighbours.push([]);
+    }
+    /* Edges, once each. */
+    const seen = new Set();
+    for (let i = 0; i < n; i++) {
+        const a = regionAt[i];
+        for (const j of neighbours2(i, w, h, nb)) {
+            const b = regionAt[j];
+            if (a === b)
+                continue;
+            const key = a < b ? a * count + b : b * count + a;
+            if (seen.has(key))
+                continue;
+            seen.add(key);
+            neighbours[a].push(b);
+            neighbours[b].push(a);
+        }
+    }
+    return { regionAt, colours, sizes, neighbours, count };
+}
+/* A copy of `neighbours` under another name, because `neighbours` is already
+   taken by the region field above and shadowing it inside these functions was
+   a bug waiting to be written. */
+function neighbours2(i, w, h, out) {
+    return neighbours(i, w, h, out);
+}
+/* The fewest moves that could possibly still be needed, never more.
+ *
+ * Walk the region graph out from the blob and take the furthest region: each
+ * move pulls the blob one step along that graph at best, so a region five
+ * steps out needs at least five more moves. Being a lower bound and never an
+ * overestimate is what keeps A*'s answer exactly optimal rather than merely
+ * good. */
+function stillToGo(regions, blobRegion) {
+    const dist = new Int32Array(regions.count).fill(-1);
+    dist[blobRegion] = 0;
+    const queue = [blobRegion];
+    let far = 0;
+    for (let q = 0; q < queue.length; q++) {
+        const d = dist[queue[q]] + 1;
+        for (const j of regions.neighbours[queue[q]]) {
+            if (dist[j] >= 0)
+                continue;
+            dist[j] = d;
+            if (d > far)
+                far = d;
+            queue.push(j);
+        }
+    }
+    return far;
+}
+/* A binary heap, because A* wants the cheapest node next and a sorted array
+   costs more than the search saves. */
+class Heap {
+    f = [];
+    items = [];
+    get size() { return this.f.length; }
+    push(f, g, grid) {
+        this.f.push(f);
+        this.items.push({ g, grid });
+        let i = this.f.length - 1;
+        while (i > 0) {
+            const parent = (i - 1) >> 1;
+            if (this.f[parent] <= this.f[i])
+                break;
+            this.swap(i, parent);
+            i = parent;
+        }
+    }
+    pop() {
+        const top = this.items[0];
+        const lastF = this.f.pop();
+        const lastItem = this.items.pop();
+        if (this.f.length) {
+            this.f[0] = lastF;
+            this.items[0] = lastItem;
+            let i = 0;
+            for (;;) {
+                const l = 2 * i + 1;
+                const r = l + 1;
+                let small = i;
+                if (l < this.f.length && this.f[l] < this.f[small])
+                    small = l;
+                if (r < this.f.length && this.f[r] < this.f[small])
+                    small = r;
+                if (small === i)
+                    break;
+                this.swap(i, small);
+                i = small;
+            }
+        }
+        return top;
+    }
+    swap(a, b) {
+        const f = this.f[a];
+        this.f[a] = this.f[b];
+        this.f[b] = f;
+        const it = this.items[a];
+        this.items[a] = this.items[b];
+        this.items[b] = it;
+    }
+}
+/* Fewest moves from where the board stands. Exactly fewest, not nearly.
+ *
+ * A* over positions, ordered by moves-so-far plus the lower bound above, and
+ * memoised on the board itself so a position reached two ways is expanded
+ * once. It was a plain breadth-first search when every layer was a single
+ * colour, because then only one move ever did anything and there was nothing
+ * to search. Splitting the layers put two to four colours on the blob's edge
+ * at a time, and breadth-first went from settling a board in a few hundred
+ * states to not settling it at all.
+ *
+ * The one pruning rule: only colours already touching the blob are worth
+ * playing. Recolouring to anything else cannot grow the blob, so the move
+ * changes nothing but the blob's own colour — and whatever you meant to play
+ * next, you could have played instead.
+ *
+ * Returns null rather than a number if the cap is reached. */
 export function solve(level, cap = 200000) {
     const w = level.width;
     const h = level.height;
@@ -587,68 +886,93 @@ export function solve(level, cap = 200000) {
     for (let r = 0; r < h; r++)
         for (let c = 0; c < w; c++)
             start[r * w + c] = level.grid[r][c];
-    const nb = [];
-    const blobCells = new Int32Array(n);
-    const inBlob = new Uint8Array(n);
-    /* Fills blobCells with the blob and returns its size, leaving inBlob set
-       for the caller to read and then clear. */
-    function flood(g) {
-        inBlob.fill(0);
-        const colour = g[origin];
-        blobCells[0] = origin;
-        inBlob[origin] = 1;
-        let size = 1;
-        for (let q = 0; q < size; q++) {
-            for (const j of neighbours(blobCells[q], w, h, nb)) {
-                if (!inBlob[j] && g[j] === colour) {
-                    inBlob[j] = 1;
-                    blobCells[size++] = j;
-                }
-            }
-        }
-        return size;
-    }
-    if (flood(start) === n)
+    const key = (g) => String.fromCharCode.apply(null, Array.from(g));
+    const first = regionsOf(start, w, h);
+    if (first.count === 1)
         return 0;
+    const heap = new Heap();
+    const best = new Map();
+    heap.push(stillToGo(first, first.regionAt[origin]), 0, start);
+    best.set(key(start), 0);
     let states = 1;
-    const seen = new Set([String.fromCharCode.apply(null, Array.from(start))]);
-    let frontier = [start];
-    for (let depth = 1; frontier.length; depth++) {
-        const next = [];
-        for (const g of frontier) {
-            const size = flood(g);
-            const colour = g[origin];
-            const edge = [];
-            for (let q = 0; q < size; q++) {
-                for (const j of neighbours(blobCells[q], w, h, nb)) {
-                    if (!inBlob[j] && g[j] !== colour && edge.indexOf(g[j]) < 0)
-                        edge.push(g[j]);
-                }
-            }
-            /* Read the blob out before the next flood overwrites it. */
-            const cells = blobCells.slice(0, size);
-            for (const c of edge) {
-                const g2 = g.slice();
-                for (let q = 0; q < size; q++)
-                    g2[cells[q]] = c;
-                let uniform = true;
-                for (let i = 0; i < n; i++)
-                    if (g2[i] !== c) {
-                        uniform = false;
-                        break;
-                    }
-                if (uniform)
-                    return depth;
-                const key = String.fromCharCode.apply(null, Array.from(g2));
-                if (seen.has(key))
-                    continue;
-                if (++states > cap)
-                    return null;
-                seen.add(key);
-                next.push(g2);
+    while (heap.size) {
+        const { g, grid } = heap.pop();
+        const regions = regionsOf(grid, w, h);
+        const blob = regions.regionAt[origin];
+        if (regions.count === 1)
+            return g;
+        /* A stale heap entry: this board was reached more cheaply after it was
+           queued. */
+        const seen = best.get(key(grid));
+        if (seen !== undefined && seen < g)
+            continue;
+        const playable = new Set();
+        for (const j of regions.neighbours[blob])
+            playable.add(regions.colours[j]);
+        for (const colour of playable) {
+            const next = grid.slice();
+            for (let i = 0; i < n; i++)
+                if (regions.regionAt[i] === blob)
+                    next[i] = colour;
+            const k = key(next);
+            const had = best.get(k);
+            if (had !== undefined && had <= g + 1)
+                continue;
+            if (++states > cap)
+                return null;
+            best.set(k, g + 1);
+            const after = regionsOf(next, w, h);
+            heap.push(g + 1 + stillToGo(after, after.regionAt[origin]), g + 1, next);
+        }
+    }
+    return null;
+}
+/* How many moves the most obvious possible strategy takes: at every turn play
+ * whichever colour on the blob's edge swallows the most board, and never look
+ * further ahead than that.
+ *
+ * This exists to be BEATEN. A puzzle that greedy finishes in par is a puzzle
+ * with nothing to think about — you can play it without ever looking past the
+ * cells you are touching — and the generator throws those away rather than
+ * shipping them. It was worth writing precisely because the first version of
+ * this game failed that test on every board of every difficulty, and nothing
+ * else in the codebase noticed. */
+export function greedy(level, limit = 200) {
+    const w = level.width;
+    const h = level.height;
+    const n = w * h;
+    const origin = level.origin[0] * w + level.origin[1];
+    const grid = new Uint8Array(n);
+    for (let r = 0; r < h; r++)
+        for (let c = 0; c < w; c++)
+            grid[r * w + c] = level.grid[r][c];
+    for (let moves = 0; moves < limit; moves++) {
+        const regions = regionsOf(grid, w, h);
+        if (regions.count === 1)
+            return moves;
+        const blob = regions.regionAt[origin];
+        /* How much each playable colour would take, counted over whole regions. */
+        const gain = new Map();
+        for (const j of regions.neighbours[blob]) {
+            const c = regions.colours[j];
+            gain.set(c, (gain.get(c) ?? 0) + regions.sizes[j]);
+        }
+        let pick = -1;
+        let most = -1;
+        /* Ties go to the lower colour index, so this is one strategy and not a
+           family of them — a tie broken at random would make the gate it feeds
+           non-deterministic. */
+        for (const [colour, size] of [...gain.entries()].sort((a, b) => a[0] - b[0])) {
+            if (size > most) {
+                most = size;
+                pick = colour;
             }
         }
-        frontier = next;
+        if (pick < 0)
+            return null;
+        for (let i = 0; i < n; i++)
+            if (regions.regionAt[i] === blob)
+                grid[i] = pick;
     }
     return null;
 }
@@ -662,6 +986,9 @@ const MAX_ATTEMPTS = 200;
 export function generateDetailed(opts) {
     const { width, height, palette, targetMoves, seed } = opts;
     const strandChance = opts.strandChance ?? 0;
+    const patchSize = opts.patchSize ?? 0;
+    const slack = opts.slack ?? 0;
+    const parBand = opts.parBand ?? [targetMoves, targetMoves * 3];
     if (!Number.isInteger(width) || !Number.isInteger(height) || width < 2 || height < 2) {
         throw new Error('width and height must be whole numbers of at least 2');
     }
@@ -675,6 +1002,10 @@ export function generateDetailed(opts) {
         throw new Error('seed must be a non-empty string');
     if (strandChance < 0 || strandChance > 1)
         throw new Error('strandChance must be between 0 and 1');
+    if (patchSize < 0)
+        throw new Error('patchSize must not be negative');
+    if (slack < 0)
+        throw new Error('slack must not be negative');
     const layerCount = targetMoves + 1;
     const origin = opts.origin ?? [height - 1, 0];
     if (origin[0] < 0 || origin[0] >= height || origin[1] < 0 || origin[1] >= width) {
@@ -689,7 +1020,7 @@ export function generateDetailed(opts) {
        meeting at the corner. Nested bands fill a board from a corner in
        max(w, h) of them, and from the middle in rather fewer, which is why the
        count is taken from where the blob actually starts.
-       
+  
        A lucky board sometimes squeezes out one more. It is not offered: a
        generator dealing a campaign has to be predictable about what it accepts,
        and "sometimes" is worse than one fewer. */
@@ -705,8 +1036,12 @@ export function generateDetailed(opts) {
     const originIdx = origin[0] * w + origin[1];
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         let layerOf;
+        let patches;
+        let patchColours;
         try {
             layerOf = growLayers(w, h, originIdx, layerCount, rand);
+            patches = splitIntoPatches(w, h, layerOf, layerCount, patchSize, rand);
+            patchColours = colourPatches(w, h, patches, palette, rand);
         }
         catch (err) {
             if (err instanceof Regenerate)
@@ -714,18 +1049,23 @@ export function generateDetailed(opts) {
             throw err;
         }
         const layers = [];
+        const patchGrid = [];
         for (let r = 0; r < h; r++) {
-            const row = [];
-            for (let c = 0; c < w; c++)
-                row.push(layerOf[r * w + c]);
-            layers.push(row);
+            const layerRow = [];
+            const patchRow = [];
+            for (let c = 0; c < w; c++) {
+                layerRow.push(layerOf[r * w + c]);
+                patchRow.push(patches.patchAt[r * w + c]);
+            }
+            layers.push(layerRow);
+            patchGrid.push(patchRow);
         }
         assertLayerInvariants(w, h, layers, layerCount);
-        const colours = assignColours(layerCount, palette, rand);
+        assertPatchInvariants(w, h, patchGrid, patchColours);
         const flat = new Int32Array(w * h);
         for (let i = 0; i < w * h; i++)
-            flat[i] = colours[layerOf[i]];
-        const islands = strand(w, h, layerOf, flat, colours, layerCount, strandChance, rand);
+            flat[i] = patchColours[patches.patchAt[i]];
+        const islands = strand(w, h, layerOf, flat, layerCount, strandChance, rand);
         const grid = [];
         for (let r = 0; r < h; r++) {
             const row = [];
@@ -734,21 +1074,31 @@ export function generateDetailed(opts) {
             grid.push(row);
         }
         const level = {
-            width, height, origin, grid, palette, moveLimit: targetMoves, seed,
+            width, height, origin, grid, palette,
+            par: targetMoves, moveLimit: targetMoves, seed,
         };
-        /* Without islands the construction settles par on its own and the search
-           would only be confirming what is already proved. With them, the board
-           no longer matches the layers it was built from, so the search has the
-           last word — and a board whose true par wandered outside the band asked
-           for is thrown back rather than shipped with a move limit nobody can
-           meet or one nobody can feel. */
-        if (islands) {
+        /* One layer per move only holds while a layer is one colour and nothing
+           has been hidden inside a later one. Either of those and the
+           construction has stopped being the answer, so the search becomes it. */
+        if (patchSize > 0 || islands) {
             const par = solve(level);
-            if (par === null || par < targetMoves || par > targetMoves + 2)
+            if (par === null || par < parBand[0] || par > parBand[1])
                 continue;
-            level.moveLimit = par;
+            level.par = par;
         }
-        return { level, layers, layerCount, colours, attempts: attempt };
+        level.moveLimit = level.par + slack;
+        /* And the gate the whole patch business exists to pass. A board the
+           one-move-deep strategy finishes in par is a board you can play without
+           ever looking past the cells you are touching — which is not a puzzle,
+           however good it looks. Thinking has to be worth something. */
+        const greedyMoves = greedy(level);
+        if (patchSize > 0 && (greedyMoves === null || greedyMoves <= level.par))
+            continue;
+        return {
+            level, layers, layerCount,
+            patches: patchGrid, patchColours,
+            greedyMoves, attempts: attempt,
+        };
     }
     throw new Error('gave up after ' + MAX_ATTEMPTS + ' boards for seed "' + seed + '" — ' +
         targetMoves + ' moves on ' + width + '×' + height + ' with ' + palette + ' colours');

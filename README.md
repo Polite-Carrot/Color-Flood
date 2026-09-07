@@ -6,8 +6,11 @@ given.
 The board is a grid, and the bottom-left corner is the **blob** — the run of
 touching cells that share its color. Pick a color and the blob becomes it,
 swallowing whatever it now matches along its edge. Win by turning the whole
-board one color; the level tells you how many moves you get, and that number
-is the fewest that will do it, not a guess.
+board one color, inside the moves you are given.
+
+Every level knows its own **par** — the fewest moves that will finish it,
+found by search, not estimated. The easier settings give you par and a little
+room; the hardest give you par exactly.
 
 **Play it:** https://polite-carrot.github.io/Color-Flood/
 
@@ -53,6 +56,66 @@ a few cells and the last one is most of the board.
 So each layer takes the band it must have and then grows a random blob past
 it, sized so the layers still to come get a fair share of what is left. That
 is the whole difference between a board you look at and a board you look into.
+
+### Why one color per layer was not a game
+
+The construction above is elegant and it produced, for a while, a game with no
+decisions in it at all.
+
+Look again at the invariant: layer *n* touches only layers *n−1*, *n* and
+*n+1*. The blob is always exactly layers 1..*n*. So the only layer on the
+blob's edge is *n+1* — and if a layer is one color, that is **one legal move,
+every turn, on every board**. Measured across the five difficulties, the
+number of colors touching the blob averaged 1.00, 1.00, 1.04, 1.08 and 1.11,
+and a strategy that never looks past the current move finished 100% of boards
+of every difficulty inside par.
+
+The exactness and the emptiness were the same property. A layer that is one
+color is a layer that costs exactly one move, and a layer that costs exactly
+one move is a layer you cannot get wrong. No amount of tuning reaches that;
+the layer had to stop being one color.
+
+So each layer is now cut into a few connected **patches**, and the patches are
+colored so no two that touch match. The blob's edge carries two, three, four
+colors. Taking one patch does not take its neighbours. And the order matters,
+because a patch of layer *n+1* becomes reachable the moment the layer-*n*
+patch beside it is absorbed — so the layers interleave rather than falling
+like dominoes.
+
+| | Colors on the blob's edge | Turns with no choice | Greedy wins |
+|---|---|---|---|
+| One color per layer | 1.00 – 1.11 | 90 – 100% | 100% |
+| Cut into patches | 1.83 – 2.79 | 16 – 40% | 3 – 99% |
+
+What it costs is the exact par. A layer is no longer one move, so the answer
+is whatever `solve` says — and `solve` had to be rewritten, because breadth-
+first search was only ever adequate when there was nothing to search.
+
+### The greedy gate
+
+`greedy` plays the most obvious possible strategy: take whichever color on the
+edge swallows the most board, never look further than one move. It exists to
+be beaten. **Any board it finishes in par is discarded and another dealt**, so
+"this puzzle has something to think about" is a generator invariant enforced
+on every level, not a hope.
+
+That check is the one that would have caught the original problem on day one.
+Nothing else did — every board was solvable, every test was green, and the
+game was still a matter of clicking the only lit-up button.
+
+### The solver
+
+`solve` is A*, over board positions, ordered by moves-so-far plus a lower
+bound on moves-still-needed, memoised on the position itself.
+
+The bound comes from seeing the board as **regions** rather than cells — a
+16×16 board of 256 cells is usually forty or fifty blocks of one color, and a
+move absorbs whole regions. Walk that graph out from the blob and take the
+furthest region: each move pulls the blob one step along it at best, so a
+region five steps out needs at least five more moves. Being a lower bound and
+never an overestimate is what keeps the answer exactly optimal rather than
+merely good, and it is what makes the search finish at all — plain breadth-
+first went from settling a board in a few hundred states to not settling it.
 
 ### Why nine moves does not fit on a 9×9 board
 
@@ -205,19 +268,38 @@ name begins with an underscore — a silent 404 rather than an error.
 The corner cell is yours, along with every cell touching it that shares its
 color — the blob, drawn with a heavy outline so there is never a question
 about what you hold. Pick a color and the whole blob becomes it. Win by
-turning the board one color.
+turning the board one color before the moves run out.
 
-Five sizes, from a 7×7 in four moves to a 16×16 in twelve. The daily's setting
-depends on the day of the week, so the week has a shape to it: a gentle start
-and the two hardest settings at the weekend. A streak is kept in
-`localStorage` and nowhere else, so it is per-browser and per-device, and
-clearing site data clears it.
+The difficulty is not really the board size. It is how much room you are given
+over par, and the numbers behind that are measured rather than guessed:
+
+| | Board | Colors | Given | Greedy wins |
+|---|---|---|---|---|
+| Easy | 7×7 | 4 | par + 2 | ~99% |
+| Normal | 10×10 | 5 | par + 1 | ~79% |
+| Hard | 12×12 | 6 | par + 1 | ~48% |
+| Extra Hard | 14×14 | 6 | par exactly | ~4% |
+| Expert | 16×16 | 6 | par exactly | ~3% |
+
+"Greedy wins" is the share of boards you can finish by always taking whichever
+color swallows the most, never thinking further ahead. Easy is meant to be
+won that way — it teaches the mechanic. By Extra Hard the obvious move is
+usually the wrong one, and the puzzle is finding the move that opens two
+regions at once instead of the one that eats the most now.
+
+Undo and restart are free and unlimited, which is what makes par-exact fair
+rather than cruel.
+
+The daily's setting depends on the day of the week, so the week has a shape to
+it: a gentle start and the two hardest settings at the weekend. A streak is
+kept in `localStorage` and nowhere else, so it is per-browser and per-device,
+and clearing site data clears it.
 
 Tapping a **cell** plays that cell's color, which on a phone is much the
-fastest way in — you point at the band you want rather than hunting for it in
-the row of swatches. Every cell also carries its color's initial, faintly, so
-the board can be read without relying on color alone; that can be turned off
-in Settings.
+fastest way in — you point at the region you want rather than hunting for it
+in the row of swatches. Every cell also carries its color's initial, faintly,
+so the board can be read without relying on color alone; that can be turned
+off in Settings.
 
 ## What the tests are actually for
 
@@ -231,13 +313,20 @@ perfectly happily on a broken board, right up until somebody cannot finish it.
 - **The layer invariants**, over 500 boards of assorted sizes: every layer one
   connected region, and no cell touching a layer two away. A cell touching a
   layer two away means a move could jump a layer, and par is not par.
-- **Agreement between `solve` and `targetMoves`.** The construction says three
-  moves; the search has to find three. Not two, which would mean a level
-  advertising more difficulty than it has, and not four, which would mean a
-  level nobody can beat.
-- **The line actually plays.** The construction proves a board can be finished
-  in n moves; this walks that line one move at a time through the same code
-  the buttons call, on every setting, and checks it wins on the last one.
+- **Every board is worth playing.** No level is ever returned that `greedy`
+  finishes in par. This is the test that matters most, because its absence is
+  what let a game with exactly one legal move per turn get all the way to a
+  deployed site with everything green behind it.
+- **More than one color on the blob's edge**, averaged over real play. The
+  direct measurement of the same thing, and the one that would have shown 1.00
+  in the old build.
+- **Agreement between `solve` and the level's own par.** A level advertising a
+  par its own solver disagrees with is either promising more difficulty than
+  it has or asking for something impossible.
+- **The construction still holds where it is claimed.** With patches switched
+  off a layer is one color again and the layer count *is* the answer, so the
+  test walks that line one move at a time through the same code the buttons
+  call and checks it wins on the last one.
 - **Nothing writes back into the level it was dealt.** Restart goes back to
   the level's own grid, so a move that reached into it would leave a board
   that could not be restarted — and the bug would only show on somebody's

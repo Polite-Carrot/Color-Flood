@@ -17,52 +17,67 @@ export type Setting = {
   width: number;
   height: number;
   palette: number;
-  moves: number;
-  strandChance: number;
+  /* How deep the layer construction goes. NOT the answer — with the layers
+     cut into patches the answer is whatever the search finds, and it lands
+     well above this. Depth 8 on a 12x12 board comes out around par 12. */
+  depth: number;
+  /* Roughly how many cells to a patch. Smaller patches put more colours on
+     the blob's edge, which is the whole of the difficulty. */
+  patchSize: number;
+  /* What par is allowed to be. A board outside is thrown back. */
+  parBand: [number, number];
+  /* Moves above par the player is given. This is the difficulty dial that
+     the player actually feels. Measured over hundreds of boards, playing
+     greedily — always taking whichever colour swallows the most, never
+     looking further — finishes one or two moves above par. So slack 2 is a
+     board greedy will beat, slack 1 is a board where it is touch and go, and
+     slack 0 cannot be beaten without finding a line better than the obvious
+     one. That is the curve. */
+  slack: number;
 };
 
-/* Five settings, and the thing that steps up between them is the board. More
-   colours alone does not make a flood puzzle harder — it makes the next band
-   easier to pick out, if anything. What makes it harder is a longer chain to
-   read ahead through, so the board grows and the move count grows with it.
+/* Five settings. What steps up between them is the board, the number of
+   patches on it, and — mostly — how much room there is above par.
    
-   Every one of these leaves the board three bands of slack — a 12×12 board
-   holds twelve L-bands and is asked for eight. That is the single most
-   important number here and it is not about difficulty at all, it is about
-   how the boards LOOK. At its ceiling a board has no freedom: every layer has
-   to be exactly one band wider than the last, so the ragged growth is
-   suppressed and what comes out is stripes. Give it slack and the layers can
-   spread sideways, which is where all the shape comes from. Nine moves on a
-   twelve-wide board would be a fine puzzle and a dull picture.
+   More colours alone does not make a flood puzzle harder; if anything it
+   makes the next region easier to pick out. What makes it hard is having
+   several worthwhile moves at once and no way to tell which pays off four
+   moves later, which is what cutting the layers into patches produces.
    
-   Islands arrive at Hard and get likelier from there. They are the one thing
-   that breaks the tidy "one band per move" reading, so they are what the top
-   two settings are actually about. */
+   Every board also leaves the layer construction three bands of slack below
+   its ceiling, which is not about difficulty at all but about how the board
+   LOOKS: at its ceiling every layer must be exactly one band wider than the
+   last, the ragged growth is suppressed, and the board comes out ruled. */
 export const SETTINGS: Setting[] = [
   {
     key: 'easy', label: 'Easy',
-    blurb: 'A small board and four colors. Read the bands and walk out.',
-    width: 7, height: 7, palette: 4, moves: 4, strandChance: 0,
+    blurb: 'A small board, and two moves in hand over the best line.',
+    width: 7, height: 7, palette: 4, depth: 4, patchSize: 6,
+    parBand: [5, 7], slack: 2,
   },
   {
     key: 'normal', label: 'Normal',
-    blurb: 'Wider, with a longer chain to see all the way through.',
-    width: 10, height: 10, palette: 5, moves: 6, strandChance: 0,
+    blurb: 'Wider, with one move spare. Playing the biggest grab every time will just about do it.',
+    width: 10, height: 10, palette: 5, depth: 6, patchSize: 8,
+    parBand: [8, 11], slack: 1,
   },
   {
     key: 'hard', label: 'Hard',
-    blurb: 'Twelve across, and the first islands to double back for.',
-    width: 12, height: 12, palette: 5, moves: 8, strandChance: 0.35,
+    blurb: 'Twelve across and six colours, still with one move spare — but the greedy line is tighter than it looks.',
+    width: 12, height: 12, palette: 6, depth: 8, patchSize: 8,
+    parBand: [11, 14], slack: 1,
   },
   {
     key: 'extraHard', label: 'Extra Hard',
-    blurb: 'Fourteen across, six colors, and islands most of the way down.',
-    width: 14, height: 14, palette: 6, moves: 10, strandChance: 0.55,
+    blurb: 'Fourteen across, and no room over par. The obvious move is not always the one that pays.',
+    width: 14, height: 14, palette: 6, depth: 9, patchSize: 10,
+    parBand: [11, 15], slack: 0,
   },
   {
     key: 'expert', label: 'Expert',
-    blurb: 'Sixteen across and twelve moves. Every one of them has to be right.',
-    width: 16, height: 16, palette: 6, moves: 12, strandChance: 0.65,
+    blurb: 'Sixteen across, at par exactly. Nothing but the best line will finish it.',
+    width: 16, height: 16, palette: 6, depth: 10, patchSize: 12,
+    parBand: [12, 16], slack: 0,
   },
 ];
 
@@ -75,8 +90,10 @@ export function optionsFor(setting: Setting, seed: string): GenOptions {
     width: setting.width,
     height: setting.height,
     palette: setting.palette,
-    targetMoves: setting.moves,
-    strandChance: setting.strandChance,
+    targetMoves: setting.depth,
+    patchSize: setting.patchSize,
+    parBand: setting.parBand,
+    slack: setting.slack,
     seed,
   };
 }

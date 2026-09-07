@@ -7,7 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { generate, generateDetailed, solve } from './generator.ts';
-import { blobColour, blobOf, canPlay, movesLeft, play, restart, start, undo, won } from './play.ts';
+import { blobColour, blobOf, canPlay, play, restart, start, undo, won } from './play.ts';
 import { SETTINGS, dailySeed, dailySetting, dayKey, optionsFor } from './levels.ts';
 
 describe('the blob', () => {
@@ -29,36 +29,93 @@ describe('the blob', () => {
   });
 });
 
-describe('playing the line the board was built from', () => {
-  it('wins in exactly the move limit, on every setting', () => {
-    for (const setting of SETTINGS) {
-      /* Islands break the one-band-per-move line, so this walks the layers
-         only on the settings that have none — the stranded ones are covered
-         by the solver test below. */
-      if (setting.strandChance > 0) continue;
-      for (let i = 0; i < 12; i++) {
-        const opts = optionsFor(setting, 'line-' + i);
-        const { level, colours, layerCount } = generateDetailed(opts);
-        const game = start(level);
-        const where = setting.key + ' seed line-' + i;
+describe('the construction still holds where it is meant to', () => {
+  it('wins in exactly targetMoves when a layer is one colour', () => {
+    /* patchSize 0 is the original construction, and its whole claim is that
+       the layer count IS the answer. A layer being one colour is what makes
+       the line readable off the board: take the colour of any cell in layer
+       2, then layer 3, and so on. */
+    for (let i = 0; i < 20; i++) {
+      const opts = { width: 9, height: 8, palette: 4, targetMoves: 5, seed: 'line-' + i };
+      const { level, layers, layerCount } = generateDetailed(opts);
+      const game = start(level);
+      const where = JSON.stringify(opts);
 
-        for (let layer = 2; layer <= layerCount; layer++) {
-          expect(won(game), where + ' won early at layer ' + layer).toBe(false);
-          play(game, colours[layer]);
+      const colourOfLayer = (layer: number): number => {
+        for (let r = 0; r < level.height; r++) {
+          for (let c = 0; c < level.width; c++) if (layers[r][c] === layer) return level.grid[r][c];
         }
-        expect(won(game), where).toBe(true);
-        expect(game.played.length, where).toBe(level.moveLimit);
-        expect(movesLeft(game), where).toBe(0);
+        throw new Error('layer ' + layer + ' is empty');
+      };
+
+      for (let layer = 2; layer <= layerCount; layer++) {
+        expect(won(game), where + ' won early at layer ' + layer).toBe(false);
+        play(game, colourOfLayer(layer));
+      }
+      expect(won(game), where).toBe(true);
+      expect(game.played.length, where).toBe(opts.targetMoves);
+      expect(level.par, where).toBe(opts.targetMoves);
+    }
+  });
+});
+
+describe('the puzzles are worth playing', () => {
+  /* The failure this catches is the one that got all the way to a deployed
+     site: every board solvable, every test green, and not one of them a
+     puzzle. One legal move per turn is not a difficulty setting, it is an
+     absence of a game, and nothing else here would have said so. */
+  it('never ships a board that greedy solves in par', () => {
+    for (const setting of SETTINGS) {
+      for (let i = 0; i < 8; i++) {
+        const { level, greedyMoves } = generateDetailed(optionsFor(setting, 'worth-' + i));
+        const where = setting.key + ' seed worth-' + i;
+        expect(greedyMoves, where + ' — greedy could not finish at all').not.toBeNull();
+        expect(greedyMoves, where + ' — greedy matches par, so there is nothing to think about')
+          .toBeGreaterThan(level.par);
       }
     }
   });
 
-  it('agrees with the solver on stranded boards too', () => {
+  it('puts more than one colour on the blob\'s edge', () => {
+    /* The direct measurement of the same thing: how many moves actually do
+       anything when it is your turn. One is the broken case. */
+    let turns = 0;
+    let choices = 0;
     for (const setting of SETTINGS) {
-      if (setting.strandChance === 0) continue;
+      for (let i = 0; i < 6; i++) {
+        const level = generate(optionsFor(setting, 'edge-' + i));
+        const game = start(level);
+        while (!won(game) && game.played.length < level.moveLimit) {
+          const blob = blobOf(game);
+          const mine = blobColour(game);
+          const touching = new Set<number>();
+          for (let r = 0; r < level.height; r++) {
+            for (let c = 0; c < level.width; c++) {
+              if (!blob[r][c]) continue;
+              for (const [nr, nc] of [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]] as const) {
+                if (nr < 0 || nc < 0 || nr >= level.height || nc >= level.width) continue;
+                if (!blob[nr][nc] && game.grid[nr][nc] !== mine) touching.add(game.grid[nr][nc]);
+              }
+            }
+          }
+          turns++;
+          choices += touching.size;
+          /* Play something, anything, to move the board on. */
+          const next = [...touching][0];
+          if (next === undefined) break;
+          play(game, next);
+        }
+      }
+    }
+    expect(choices / turns).toBeGreaterThan(2);
+  });
+
+  it('agrees with the solver about par', () => {
+    for (const setting of SETTINGS) {
       for (let i = 0; i < 4; i++) {
-        const level = generate(optionsFor(setting, 'strand-line-' + i));
-        expect(solve(level), setting.key + ' seed ' + i).toBe(level.moveLimit);
+        const level = generate(optionsFor(setting, 'par-' + i));
+        expect(solve(level), setting.key + ' seed ' + i).toBe(level.par);
+        expect(level.moveLimit, setting.key).toBeGreaterThanOrEqual(level.par);
       }
     }
   });
@@ -105,7 +162,7 @@ describe('settings and dailies', () => {
     for (const setting of SETTINGS) {
       const level = generate(optionsFor(setting, 'settings-check'));
       expect(level.width, setting.key).toBe(setting.width);
-      expect(level.moveLimit, setting.key).toBeGreaterThanOrEqual(setting.moves);
+      expect(level.moveLimit, setting.key).toBeGreaterThanOrEqual(level.par);
     }
   });
 

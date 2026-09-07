@@ -47,6 +47,8 @@ const USAGE = `deal a flood-fill board and print it
   --palette <n>  colours in play       (default 4, at most ${MAX_PALETTE})
   --seed <s>     any string            (default today's date)
   --strand <p>   0..1, island chance   (default 0)
+  --patch <n>    cells per patch       (default 0 = one colour per layer)
+  --slack <n>    moves above par       (default 0)
   --solve        search for par and check it against the move limit
   --plain        letters only, no colour
   --help`;
@@ -79,6 +81,8 @@ function main(): void {
     targetMoves: num(args, 'moves', 3),
     seed: typeof args.seed === 'string' ? args.seed : today(),
     strandChance: num(args, 'strand', 0),
+    patchSize: num(args, 'patch', 0),
+    slack: num(args, 'slack', 0),
   };
 
   /* The generator is happy with any number of colours — it only ever deals
@@ -89,7 +93,7 @@ function main(): void {
   }
 
   const started = Date.now();
-  const { level, layerCount, colours, attempts } = generateDetailed(opts);
+  const { level, layerCount, patchColours, greedyMoves, attempts } = generateDetailed(opts);
   const dealt = Date.now() - started;
 
   const plain = Boolean(args.plain) || colourless();
@@ -97,7 +101,8 @@ function main(): void {
   console.log('');
   console.log(
     '  ' + level.width + '×' + level.height +
-    '   par ' + level.moveLimit +
+    '   par ' + level.par +
+    (level.moveLimit !== level.par ? ' (limit ' + level.moveLimit + ')' : '') +
     '   ' + level.palette + ' colours' +
     '   seed ' + level.seed,
   );
@@ -112,8 +117,16 @@ function main(): void {
   const [or, oc] = level.origin;
   console.log('  blob starts at row ' + or + ', column ' + oc +
     ' (' + colour(level.grid[or][oc]).name + ')');
-  console.log('  intended line: ' +
-    colours.slice(2, layerCount + 1).map((c) => colour(c).name).join(' → '));
+  console.log('  ' + layerCount + ' layers, ' + patchColours.length + ' patches');
+  /* The number that says whether the board is worth playing: how far the
+     obvious one-move-deep strategy falls short of the best line. Nothing is
+     the answer nobody wants — it means the board can be played without
+     thinking. */
+  console.log('  greedy needs ' + (greedyMoves === null ? 'more than the cap' : greedyMoves) +
+    ' against par ' + level.par +
+    (greedyMoves !== null && greedyMoves > level.par
+      ? '  (+' + (greedyMoves - level.par) + ' — thinking is worth something)'
+      : '  ** greedy matches par: nothing to think about'));
   console.log('  dealt in ' + dealt + 'ms' + (attempts ? ', after ' + attempts + ' thrown back' : ''));
 
   if (args.solve) {
@@ -121,8 +134,8 @@ function main(): void {
     const par = solve(level);
     console.log('  searched: par ' + (par === null ? 'not found inside the cap' : par) +
       ' in ' + (Date.now() - t) + 'ms' +
-      (par === level.moveLimit ? ' — matches the move limit' : '  ** DISAGREES with the move limit'));
-    if (par !== level.moveLimit) process.exitCode = 1;
+      (par === level.par ? ' — matches' : '  ** DISAGREES with the level'));
+    if (par !== level.par) process.exitCode = 1;
   }
   console.log('');
 }

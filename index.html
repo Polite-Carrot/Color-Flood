@@ -116,7 +116,7 @@
       </div>
       <div class="topbar__stats">
         <span class="stat"><b id="stat-moves">0</b><small>moves</small></span>
-        <span class="stat"><b id="stat-par">0</b><small>par</small></span>
+        <span class="stat"><b id="stat-left">0</b><small>left</small></span>
       </div>
     </header>
 
@@ -159,9 +159,10 @@
       <li>The corner cell is <b>yours</b>. So is every cell touching it that shares its color — together they are the <b>blob</b>, drawn with a heavy outline.</li>
       <li>Pick a color and the whole blob becomes it, swallowing whatever it now matches along its edge.</li>
       <li>Win by turning the <b>whole board</b> one color.</li>
-      <li>The move count you are given is the <b>fewest that will do it</b>, so there is no room to guess. Undo and restart are free.</li>
+      <li><b>Par</b> is the fewest moves that will finish the board. You are given par plus a little, and on the hardest settings you are given par exactly.</li>
+      <li>Undo and restart are free. Use them.</li>
     </ol>
-    <p class="modal__line">Look for the band wrapped around the blob: that is almost always the color to play. Islands of an older color sit inside later bands, and those are the ones that cost you.</p>
+    <p class="modal__line">The trap is the biggest grab. Taking whichever color swallows the most board, every turn, gets you close — and on the harder settings it will leave you a move or two short. Look for the move that opens up two regions at once rather than the one that eats the most now.</p>
     <div class="modal__actions">
       <button data-close="overlay-howto" class="btn btn--primary">Got it</button>
     </div>

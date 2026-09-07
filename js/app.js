@@ -193,9 +193,10 @@ function paintStats() {
         return;
     const { game } = session;
     const used = game.played.length;
+    const left = game.level.moveLimit - used;
     $('stat-moves').textContent = String(used);
-    $('stat-par').textContent = String(game.level.moveLimit);
-    $('stat-moves').parentElement.classList.toggle('is-out', used >= game.level.moveLimit);
+    $('stat-left').textContent = String(left);
+    $('stat-left').parentElement.classList.toggle('is-out', left <= 0);
     $('undo').disabled = used === 0;
     $('restart').disabled = used === 0;
 }
@@ -225,7 +226,7 @@ function tryPlay(index) {
         say('That color was not touching the blob, so nothing moved — but the move is spent.', 'is-warn');
     }
     else if (movesLeft(game) === 0) {
-        say('Last move gone, and the board is not one color yet. Undo, or restart.', 'is-warn');
+        say('Out of moves, and the board is not one color yet. Undo, or restart.', 'is-warn');
     }
     else if (movesLeft(game) === 1) {
         say('One move left.', 'is-warn');
@@ -241,9 +242,13 @@ function finish() {
     const used = game.played.length;
     if (kind === 'daily')
         recordDaily(day);
+    const par = game.level.par;
     $('win-swatch').style.background = colour(blobColour(game)).hex;
-    $('win-line').textContent =
-        used + (used === 1 ? ' move' : ' moves') + ', against a limit of ' + game.level.moveLimit + '.';
+    $('win-title').textContent = used === par ? 'Par!' : 'Flooded!';
+    $('win-line').textContent = used === par
+        ? used + (used === 1 ? ' move' : ' moves') + ' — nothing finishes this board faster.'
+        : used + ' moves, against a par of ' + par + '. ' +
+            (used - par === 1 ? 'One move off the best line.' : (used - par) + ' moves off the best line.');
     $('win-note').textContent = kind === 'daily'
         ? 'Daily streak: ' + saved.streak + (saved.streak === saved.best && saved.best > 1 ? ' — your best yet.' : '')
         : setting.label + ' · seed ' + game.level.seed;
@@ -280,10 +285,11 @@ function begin(kind, setting, seed, day) {
         return;
     }
     session = { game: start(level), kind, setting, day };
-    $('level-name').textContent = kind === 'daily' ? 'Daily Puzzle' : setting.label;
-    $('level-sub').textContent = kind === 'daily'
-        ? day + ' · ' + setting.label
-        : level.width + '×' + level.height + ' · ' + level.palette + ' colors';
+    $('level-name').textContent = kind === 'daily' ? 'Daily Puzzle' : 'Color Flood';
+    /* Par belongs here rather than in the stats row: it does not change while
+       you play, and the row beside it is for the two numbers that do. */
+    $('level-sub').textContent = (kind === 'daily' ? day + ' · ' + setting.label : setting.label) +
+        ' · ' + level.width + '×' + level.height + ' · par ' + level.par;
     /* Show the screen BEFORE building the board. A hidden screen has no
        layout, so the board would measure the room available as zero and fall
        back to sizing itself to its own letters — a 7×7 board about a fifth of
@@ -318,7 +324,9 @@ function paintRandomScreen() {
     $('difficulty-blurb').textContent = setting.blurb;
     $('difficulty-shape').textContent =
         setting.width + '×' + setting.height + ' · ' + setting.palette + ' colors · ' +
-            setting.moves + ' moves' + (setting.strandChance > 0 ? ' · islands' : '');
+            (setting.slack === 0
+                ? 'par exactly'
+                : setting.slack + (setting.slack === 1 ? ' move' : ' moves') + ' over par');
     const ticks = $('difficulty-ticks');
     if (ticks.childElementCount !== SETTINGS.length) {
         ticks.replaceChildren();
