@@ -652,7 +652,26 @@ input:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.topbar__title span { color: var(--ink-soft); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* The setting, the size and par, on their own full-width line.
+   
+   They used to sit under the heading inside the topbar, sharing the row with
+   the Menu button and two stat pills — which left the title column 88px wide
+   on a 390px phone. "Extra Hard · 14×14 · par 13" does not fit in 88px, so it
+   wrapped, and it wrapped after a separator: a line reading "· par 12" on its
+   own. Out here it has the full width and needs one line. */
+.subline {
+  margin: 0 auto 10px;
+  max-width: 100%;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.subline:empty { display: none; }
 
 .topbar__stats { display: flex; gap: 8px; }
 .stat {
@@ -782,17 +801,33 @@ input:focus-visible {
 
 /* ───────── the colour picker ───────── */
 
+/* The colours share one row, always.
+   
+   They used to be 54px each and allowed to wrap, which on a 390px phone put
+   six of them on THREE rows — 118px of height, taken straight out of the
+   board, which is the thing anybody is actually looking at. Sharing the row
+   instead means they shrink to fit rather than falling over: six across a
+   358px screen come out 51px each. The cap stops two colours on a teaching
+   level stretching into paddles. */
 .picker {
   display: flex;
   justify-content: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 10px;
+  /* width: 100% is load-bearing, and for the same reason it is on the cards.
+     This is a flex item in a column, and auto side margins make a flex item
+     shrink to fit its CONTENT rather than fill the line. Without it the row
+     was 274px wide inside a 358px screen, and since the swatches size
+     themselves from the row, they came out 37px instead of 51px — the fix for
+     the wrapping made them smaller instead. */
+  width: 100%;
   margin: 0 auto;
   max-width: 620px;
 }
 .swatch {
-  width: 54px;
-  height: 54px;
+  flex: 1 1 0;
+  max-width: 54px;
+  aspect-ratio: 1;
   border: var(--stroke) solid var(--ink);
   border-radius: 14px;
   box-shadow: 0 var(--lift) 0 var(--ink);

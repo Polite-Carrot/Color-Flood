@@ -546,6 +546,14 @@ Tapping a **cell** plays that cell's color, which on a phone is much the
 fastest way in — you point at the region you want rather than hunting for it
 in the row of swatches.
 
+The board takes whatever height the chrome above and below it leaves, so every
+row of chrome that wraps comes straight out of the board. On a 390px phone an
+Extra Hard 14×14 was down to **17px a cell**: the six colors had wrapped onto
+three rows, and the setting-and-par line had wrapped inside a title column
+only 88px wide, orphaning a line that read "· par 12". Moving that line out of
+the topbar and making the colors share one row instead of wrapping put the
+same board back up to 22px a cell.
+
 ### Sound
 
 Four blips, ported from the sort game with the frequencies and durations
