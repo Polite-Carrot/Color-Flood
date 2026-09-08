@@ -13,7 +13,7 @@ import { blobOf, blobColour, canPlay, movesLeft, play, restart, start, undo, won
 import { MODES, bestStreakOf, dailySeed, dailySetting, dayKey, firstDailyDate, isPlayableDay, modeLabel, optionsFor, settingFor, settingsFor, streakOf, } from "./levels.js";
 import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from "./campaign.js";
 import { Sound } from "./sound.js";
-import { Ads, startAdPreview } from "./ads.js";
+import { Ads, adPreviewOnScreen, startAdPreview } from "./ads.js";
 /* ------------------------------------------------------------------ scaffolding */
 const $ = (id) => {
     const el = document.getElementById(id);
@@ -25,6 +25,11 @@ function show(screen) {
     for (const s of document.querySelectorAll('.screen'))
         s.classList.remove('is-active');
     $(screen).classList.add('is-active');
+    /* The banner lives on the menu and nowhere else, and this is the only place
+       the game changes screens — so there is no route to a board that can leave
+       it behind. */
+    Ads.onScreen(screen);
+    adPreviewOnScreen(screen);
 }
 function openOverlay(id) { $(id).hidden = false; }
 function closeOverlay(id) { $(id).hidden = true; }
@@ -909,5 +914,7 @@ paintRandomScreen();
    first interstitial is warm long before anything is allowed to show it. */
 Ads.start();
 /* Only ever with ?ads=preview in the URL. Draws an empty box the size of the
-   banner so the layout can be looked at without a phone build. */
+   banner so the layout can be looked at without a phone build. The home
+   screen is the one marked active in the HTML, so it starts on. */
 startAdPreview();
+adPreviewOnScreen('screen-home');

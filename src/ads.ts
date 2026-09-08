@@ -84,6 +84,13 @@ const BANNER_SIZE = 'BANNER';
    of the color swatches. */
 const AD_HEIGHT = '--ad-h';
 
+/* The one screen the banner is allowed on. A board is a thing somebody is
+   thinking about, and the puzzle screen is also the one screen where the
+   strip costs something real — measured, it took an Extra Hard board on a
+   375px phone from 23.6px a cell down to 19.6px. The menu has height going
+   spare and nothing to concentrate on. */
+const BANNER_ON = 'screen-home';
+
 function reserve(px: number): void {
   if (typeof document === 'undefined') return;
   document.documentElement.style.setProperty(AD_HEIGHT, px + 'px');
@@ -112,6 +119,8 @@ const DEBUG_GEOGRAPHY: number | null = null;
 type Plugin = {
   initialize(o: unknown): Promise<unknown>;
   showBanner(o: unknown): Promise<unknown>;
+  hideBanner(): Promise<unknown>;
+  resumeBanner(): Promise<unknown>;
   removeBanner(): Promise<unknown>;
   addListener(event: string, fn: (info: { height?: number }) => void): Promise<unknown>;
   requestConsentInfo(o: unknown): Promise<{ status?: string; isConsentFormAvailable?: boolean }>;
@@ -147,6 +156,12 @@ export const Ads = {
      has to be prepared again. */
   loaded: false,
   loading: null as Promise<boolean> | null,
+  /* The banner is created once and then hidden and resumed, rather than being
+     made and destroyed per screen: every showBanner is a fresh ad request,
+     and a request per screen change is both slower to appear and a good way
+     to have Google notice the traffic. */
+  bannerMade: false,
+  bannerHeight: 0,
 
   native(): boolean {
     const c = cap();
@@ -228,10 +243,32 @@ export const Ads = {
     return this.loading;
   },
 
-  /* The strip along the bottom. Shown once, at boot, and left there: a banner
-     that came and went would move the board under the player's thumb every
-     time it did. */
-  async showBanner(): Promise<boolean> {
+  /* Show or hide the strip for the screen being opened. Called from the one
+     place the game changes screens, so there is no screen this can be out of
+     step with. */
+  onScreen(screen: string): void {
+    if (!this.native()) return;
+    void this.banner(screen === BANNER_ON);
+  },
+
+  async banner(on: boolean): Promise<void> {
+    if (!on) {
+      if (!this.bannerMade) return;
+      reserve(0);
+      try { await this.plugin!.hideBanner(); } catch { /* nothing to hide */ }
+      return;
+    }
+    if (this.bannerMade) {
+      try { await this.plugin!.resumeBanner(); } catch { return; }
+      reserve(this.bannerHeight);
+      return;
+    }
+    await this.makeBanner();
+  },
+
+  /* The first show: creates the view, hangs the listeners, and asks for the
+     first ad. Everything after it is hide and resume. */
+  async makeBanner(): Promise<boolean> {
     if (!(await this.init())) return false;
     try {
       /* The plugin reports the real height once the ad is measured — 50 for
@@ -240,9 +277,13 @@ export const Ads = {
          right for either size, and what puts the space back when there is no
          ad to show. */
       await this.plugin!.addListener('bannerAdSizeChanged', (info) => {
-        reserve(typeof info?.height === 'number' ? info.height : 0);
+        this.bannerHeight = typeof info?.height === 'number' ? info.height : 0;
+        reserve(this.bannerHeight);
       });
-      await this.plugin!.addListener('bannerAdFailedToLoad', () => reserve(0));
+      await this.plugin!.addListener('bannerAdFailedToLoad', () => {
+        this.bannerHeight = 0;
+        reserve(0);
+      });
 
       const opts: Record<string, unknown> = {
         adId: this.bannerUnit,
@@ -253,6 +294,7 @@ export const Ads = {
       };
       if (!this.personalised) opts['npa'] = true;
       await this.plugin!.showBanner(opts);
+      this.bannerMade = true;
       return true;
     } catch {
       reserve(0);
@@ -307,7 +349,8 @@ export const Ads = {
     if (!this.native()) return;
     void this.init().then((ok) => {
       if (!ok) return;
-      void this.showBanner();
+      /* The home screen is the one showing at boot. */
+      void this.banner(true);
       void this.load();
     });
   },
@@ -332,9 +375,20 @@ export function startAdPreview(): void {
   if (!preview() || typeof document === 'undefined') return;
   const box = document.createElement('div');
   box.className = 'ad-preview';
+  box.hidden = true;
   /* 320x50 is the MMA banner. The strip is the width of the screen because
      that is what the space costs; the box inside it is the ad. */
   box.innerHTML = '<span>Ad preview &middot; 320&times;50</span>';
   document.body.append(box);
-  reserve(50);
+}
+
+/* Comes and goes with the same screen the real one does, or the preview would
+   be answering a different question from the one being asked. */
+export function adPreviewOnScreen(screen: string): void {
+  if (!preview() || typeof document === 'undefined') return;
+  const box = document.querySelector('.ad-preview');
+  if (!(box instanceof HTMLElement)) return;
+  const on = screen === BANNER_ON;
+  box.hidden = !on;
+  reserve(on ? 50 : 0);
 }

@@ -346,9 +346,18 @@ bottom, and an **interstitial** on the same cadence as the sort game.
 
 #### The banner
 
-320×50 — the small MMA strip — centred at the bottom, shown once at boot and
-left there. A banner that came and went would move the board under the
-player's thumb every time it did.
+320×50 — the small MMA strip — centred at the bottom of the **home screen,
+and nowhere else**. A board is a thing somebody is thinking about, and the
+puzzle screen is also the one screen where the strip costs something: measured
+below, it took an Extra Hard board on a 375px phone from 23.6px a cell down to
+19.6px. The menu has height going spare and nothing to concentrate on.
+
+The banner is created once and then hidden and resumed as the screen changes,
+rather than made and destroyed each time: every `showBanner` is a fresh ad
+request, and one per screen change would be both slower to appear and a good
+way to have Google notice the traffic. It is switched from `show()` — the one
+function the game changes screens through — so there is no route to a board
+that can leave it behind.
 
 It is drawn **natively, as a subview over the web view**, on both platforms —
 that is the plugin's own source, not a guess. It does not resize the page
@@ -360,16 +369,18 @@ The height comes from the event rather than being assumed to be 50, so an
 adaptive banner would fit too — and a banner that never fills puts the space
 back.
 
-What it costs, measured, on the Extra Hard 14×14:
+What it would cost on the puzzle screen — which is why it is not there —
+measured on the Extra Hard 14×14:
 
-| Screen | No banner | With banner |
-|--------|-----------|-------------|
+| Screen | Without | With |
+|--------|---------|------|
 | 375×667 (iPhone SE 2) | 350px board, 23.6px a cell | 294px, 19.6px a cell |
 | 393×852 (iPhone 15/16 Pro) | 364px, 24.6px a cell | **unchanged** |
 
-Taller phones pay nothing: the board there is limited by the width of the
-screen, not its height, so the banner comes out of space the board was not
-using. The SE pays a cell size for it.
+Taller phones would pay nothing: the board there is limited by the width of
+the screen, not its height, so the strip comes out of space the board was not
+using. The SE pays a whole cell size. As shipped, every puzzle screen is
+exactly the size it was before the banner existed.
 
 `ADAPTIVE_BANNER` is the other sensible size — full width instead of a 320px
 box with a gap either side, and a little taller for it. One word in `ads.ts`.
@@ -378,8 +389,9 @@ box with a gap either side, and a little taller for it. One word in `ads.ts`.
 one, and "does the layout still work with a banner in it" would otherwise need
 a TestFlight build to answer. So `?ads=preview` draws an empty box of exactly
 the size and in exactly the position the real banner lands, reserves the same
-space, and says on its face that it is a placeholder. Off unless the flag is
-in the URL, never an ad, and it never asks Google for anything:
+space on the same screen the real one appears on, and says on its face that it
+is a placeholder. Off unless the flag is in the URL, never an ad, and it never
+asks Google for anything:
 
 ```
 https://polite-carrot.github.io/Color-Flood/?ads=preview

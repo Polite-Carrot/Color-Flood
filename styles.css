@@ -108,6 +108,11 @@ body {
   border-top: 2px dashed rgba(43, 45, 66, .35);
   pointer-events: none;
 }
+/* .ad-preview sets display, and a class beats the [hidden] attribute's own
+   rule, so hiding it needs saying explicitly. Caught by looking at a
+   screenshot: --ad-h had gone to 0 and the board had grown back, and the box
+   was still sitting there over the swatches. */
+.ad-preview[hidden] { display: none; }
 .ad-preview span {
   width: 320px;
   height: 50px;
