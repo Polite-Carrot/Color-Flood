@@ -45,5 +45,24 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<!-- AdMob application ID. Google's official TEST app ID, for the same
+	     reason the Android manifest carries one: a real ca-app-pub-... value
+	     does not belong in a public repository. Swap it for the Color Flood
+	     app ID at release, alongside the ad units in src/ads.ts. -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<!-- iOS 14.5+ needs an explicit prompt before AdMob may read the IDFA.
+	     Declining is fine: ads still show, just non-personalised. -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Allow tracking to see ads relevant to you. You can decline and see less personalised ads.</string>
+	<!-- Google's SKAdNetwork identifier, so Apple attributes installs that
+	     came from a Google-served ad. -->
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>cstr6suwn9.skadnetwork</string>
+		</dict>
+	</array>
 </dict>
 </plist>

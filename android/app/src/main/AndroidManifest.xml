@@ -33,9 +33,20 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- AdMob application ID. Google's official TEST app ID, and that is
+             on purpose: a real ca-app-pub-... value in a public repository is
+             an invitation to have someone else's traffic charged against the
+             account. Swap it for the Color Flood app ID from the AdMob
+             console at release, alongside the ad units in src/ads.ts. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713"/>
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Required by targetSdk 33+ for AdMob to read the Advertising ID. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
 </manifest>

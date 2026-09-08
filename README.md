@@ -339,6 +339,71 @@ press.
 repository — pointing it there would ship the TypeScript, the tests and every
 dependency inside the app.
 
+### Ads
+
+One format, interstitial, through `@capacitor-community/admob` — the same
+plugin and the same cadence as the sort game. One fires when **both** of these
+have happened since the last one:
+
+- at least **two minutes** of wall-clock time, **and**
+- at least **three puzzles finished**.
+
+Whichever comes last, not whichever comes first. Three levels inside ninety
+seconds does not fire; two minutes spent reading the level grid does not fire.
+Only both together do.
+
+The clock starts when the page loads rather than at zero, so the first ad
+cannot land inside the opening two minutes of a fresh install. Campaign,
+daily and random all count towards it, and the count is taken at the win
+itself rather than at the button that leaves it — a player who dismisses the
+card with Escape still finished the puzzle.
+
+An ad only ever appears at a **seam**: the three buttons on the win card, once
+the card is closed and before the next thing starts. Nothing interrupts a
+board being played, and there is no ad on launch, on a loss, or on the way
+into a level.
+
+```
+Gate.note()        one puzzle finished
+Gate.warming()     one short of the threshold — start loading, so the
+                   third win does not wait on the network
+Gate.due(now)      both conditions met
+Gate.shown(now)    an ad was shown; both counters restart
+```
+
+The gate is deliberately separable from the plugin: it is arithmetic over two
+numbers, it is the part that was actually specified, and it is the part with a
+test. `src/ads.test.ts` checks both halves of the "and" — three fast wins do
+not fire, a long idle with no wins does not fire — and that showing one
+restarts both counters so a second cannot follow it immediately.
+
+**The IDs committed here are Google's official test units, on purpose.** A
+real `ca-app-pub-…` unit in a public repository is an invitation to have
+somebody else's traffic charged against the account, and a device on test IDs
+shows test creatives instead of counting a developer's own taps as real
+clicks. `isTesting` is *derived* from the ID rather than configured
+separately, so the two can never disagree: put a real unit in and test mode
+turns itself off.
+
+To ship for real, three files:
+
+| File | What to change |
+|------|----------------|
+| `src/ads.ts` | `INTERSTITIAL` — the Android and iOS **ad unit** IDs |
+| `android/app/src/main/AndroidManifest.xml` | `com.google.android.gms.ads.APPLICATION_ID` — the **app** ID |
+| `ios/App/App/Info.plist` | `GADApplicationIdentifier` — the **app** ID |
+
+Consent is handled before anything is requested: Google's UMP form where GDPR
+or an equivalent state law requires one, then iOS's App Tracking Transparency
+prompt, then the SDK — in that order, at boot, so both land while the player
+is still on the home screen rather than mid-puzzle. Every one of those calls
+is wrapped: a consent form that fails is not a reason a puzzle game cannot
+open.
+
+None of this runs on the web. `github.io` serves the same `js/ads.js`, finds
+no `window.Capacitor`, and never asks for an ad — which is also what lets the
+gate be tested in Node.
+
 ## Fitting the screen
 
 Nothing scrolls that should not, and nothing is ever cut off.
@@ -389,6 +454,7 @@ from, and `git push` is the deploy.
 | `src/palette.ts` | What a color index looks like. The generator never sees it. |
 | `src/app.ts` | The browser build. |
 | `src/sound.ts` | The blips. With `app.ts`, the only files in `src/` that know a DOM exists. |
+| `src/ads.ts` | When an interstitial is allowed to appear, and the AdMob call that shows it. A no-op off a phone. |
 | `src/cli.ts` | Deals a board and prints it to a terminal. |
 
 `generator.ts`, `play.ts`, `levels.ts`, `campaign.ts` and `palette.ts` are all

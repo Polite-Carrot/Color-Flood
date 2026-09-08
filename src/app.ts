@@ -19,6 +19,7 @@ import {
 } from './levels.ts';
 import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from './campaign.ts';
 import { Sound } from './sound.ts';
+import { Ads } from './ads.ts';
 
 /* ------------------------------------------------------------------ scaffolding */
 
@@ -487,6 +488,10 @@ function finish(): void {
     home.textContent = 'Home';
   }
   Sound.win();
+  /* One finished board towards the ad cadence. Counted here, at the win
+     itself, rather than at the button that leaves it: a player who closes the
+     card with Escape has still finished the puzzle. */
+  Ads.noteWin();
   openOverlay('overlay-win');
   say('Flooded in ' + used + '.', 'is-good');
 }
@@ -830,20 +835,27 @@ function wire(): void {
   });
   $('again').addEventListener('click', () => dealRandom($('again') as HTMLButtonElement));
 
-  $('win-again').addEventListener('click', () => {
+  /* The three ways off a finished board, and the only three places an ad is
+     allowed to appear: the card is closed, the ad is offered the seam, and
+     whatever comes next happens after it. Nothing here interrupts a board
+     being played, and the awaits are no-ops on the web build. */
+  $('win-again').addEventListener('click', async () => {
     closeOverlay('overlay-win');
+    await Ads.maybeShow();
     dealRandom($('again') as HTMLButtonElement);
   });
-  $('win-next').addEventListener('click', () => {
+  $('win-next').addEventListener('click', async () => {
     closeOverlay('overlay-win');
-    if (session?.campaign) {
-      playCampaign(session.campaign.mode, session.campaign.n + 1, $('win-next') as HTMLButtonElement);
-    }
+    const at = session?.campaign;
+    await Ads.maybeShow();
+    if (at) playCampaign(at.mode, at.n + 1, $('win-next') as HTMLButtonElement);
   });
-  $('win-home').addEventListener('click', () => {
+  $('win-home').addEventListener('click', async () => {
     closeOverlay('overlay-win');
-    if (session?.campaign) showLevels(session.campaign.mode);
-    else if (session?.kind === 'daily') { paintDailyScreen(); show('screen-daily'); }
+    const was = session;
+    await Ads.maybeShow();
+    if (was?.campaign) showLevels(was.campaign.mode);
+    else if (was?.kind === 'daily') { paintDailyScreen(); show('screen-daily'); }
     else show('screen-home');
   });
 
@@ -965,3 +977,7 @@ function paintSettings(): void {
 Sound.on = saved.sound;
 wire();
 paintRandomScreen();
+/* Native only, and deliberately at boot: the GDPR form and iOS's tracking
+   prompt land while the player is still looking at the home screen, and the
+   first interstitial is warm long before anything is allowed to show it. */
+Ads.start();

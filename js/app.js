@@ -13,6 +13,7 @@ import { blobOf, blobColour, canPlay, movesLeft, play, restart, start, undo, won
 import { MODES, bestStreakOf, dailySeed, dailySetting, dayKey, firstDailyDate, isPlayableDay, modeLabel, optionsFor, settingFor, settingsFor, streakOf, } from "./levels.js";
 import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from "./campaign.js";
 import { Sound } from "./sound.js";
+import { Ads } from "./ads.js";
 /* ------------------------------------------------------------------ scaffolding */
 const $ = (id) => {
     const el = document.getElementById(id);
@@ -422,6 +423,10 @@ function finish() {
         home.textContent = 'Home';
     }
     Sound.win();
+    /* One finished board towards the ad cadence. Counted here, at the win
+       itself, rather than at the button that leaves it: a player who closes the
+       card with Escape has still finished the puzzle. */
+    Ads.noteWin();
     openOverlay('overlay-win');
     say('Flooded in ' + used + '.', 'is-good');
 }
@@ -748,21 +753,29 @@ function wire() {
         }
     });
     $('again').addEventListener('click', () => dealRandom($('again')));
-    $('win-again').addEventListener('click', () => {
+    /* The three ways off a finished board, and the only three places an ad is
+       allowed to appear: the card is closed, the ad is offered the seam, and
+       whatever comes next happens after it. Nothing here interrupts a board
+       being played, and the awaits are no-ops on the web build. */
+    $('win-again').addEventListener('click', async () => {
         closeOverlay('overlay-win');
+        await Ads.maybeShow();
         dealRandom($('again'));
     });
-    $('win-next').addEventListener('click', () => {
+    $('win-next').addEventListener('click', async () => {
         closeOverlay('overlay-win');
-        if (session?.campaign) {
-            playCampaign(session.campaign.mode, session.campaign.n + 1, $('win-next'));
-        }
+        const at = session?.campaign;
+        await Ads.maybeShow();
+        if (at)
+            playCampaign(at.mode, at.n + 1, $('win-next'));
     });
-    $('win-home').addEventListener('click', () => {
+    $('win-home').addEventListener('click', async () => {
         closeOverlay('overlay-win');
-        if (session?.campaign)
-            showLevels(session.campaign.mode);
-        else if (session?.kind === 'daily') {
+        const was = session;
+        await Ads.maybeShow();
+        if (was?.campaign)
+            showLevels(was.campaign.mode);
+        else if (was?.kind === 'daily') {
             paintDailyScreen();
             show('screen-daily');
         }
@@ -891,3 +904,7 @@ function paintSettings() {
 Sound.on = saved.sound;
 wire();
 paintRandomScreen();
+/* Native only, and deliberately at boot: the GDPR form and iOS's tracking
+   prompt land while the player is still looking at the home screen, and the
+   first interstitial is warm long before anything is allowed to show it. */
+Ads.start();
