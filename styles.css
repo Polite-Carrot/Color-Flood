@@ -336,6 +336,20 @@ input:focus-visible {
 .subhead__title span { color: var(--ink-soft); font-size: 14px; font-weight: 700; }
 /* keeps the heading centred against the back button */
 .subhead__balance { flex: 0 0 96px; }
+/* ...but only where centring is affordable. The reservation costs 96px of
+   empty space, and a phone does not have it to give: measured, a 375px screen
+   left the title column 116px, and "Daily Puzzle" is 153px at 27px type, so
+   the heading wrapped onto two lines, took "Today: Merge · Easy" under it as
+   two more, and at 320px broke the back button itself into "←" over "Home".
+   Below 460px the reservation is worth less than the lines it costs: drop it,
+   take the heading down five points, and both fit on one line at 320px with
+   room over. The heading then sits right of true centre by about the width of
+   the button, which is what Color Match does on the same phones and reads as
+   centred next to a left-hand button. */
+@media (max-width: 460px) {
+  .subhead__balance { flex-basis: 0; }
+  .subhead__title h2 { font-size: 22px; }
+}
 
 .card {
   background: var(--paper);
