@@ -18,6 +18,7 @@ import {
   type Mode, type Setting,
 } from './levels.ts';
 import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from './campaign.ts';
+import { Sound } from './sound.ts';
 
 /* ------------------------------------------------------------------ scaffolding */
 
@@ -42,6 +43,7 @@ function closeOverlay(id: string): void { $(id).hidden = true; }
    that is not the shape expected falls back to its default, and a save from a
    future version losing a field is a shrug rather than a crash. */
 type Saved = {
+  sound: boolean;
   /* Colour Blind Assist: the colour's initial on every cell and every swatch.
      
      Not a cosmetic toggle. Simulated against protanopia and deuteranopia, blue
@@ -73,7 +75,7 @@ const blankRun = (): number[] => new Array<number>(CAMPAIGN_LENGTH).fill(0);
 const blankProgress = () => ({ best: blankRun(), par: blankRun() });
 
 const DEFAULTS: Saved = {
-  marks: true, days: [], difficulty: 'easy', mode: 'flood',
+  sound: true, marks: true, days: [], difficulty: 'easy', mode: 'flood',
   progress: { flood: blankProgress(), merge: blankProgress() },
 };
 
@@ -103,6 +105,7 @@ function load(): Saved {
     if (!raw) return { ...DEFAULTS };
     const got = JSON.parse(raw) as Partial<Saved>;
     return {
+      sound: typeof got.sound === 'boolean' ? got.sound : DEFAULTS.sound,
       marks: typeof got.marks === 'boolean' ? got.marks : DEFAULTS.marks,
       /* A save from before the calendar kept only the last day played. It is
          one day rather than none, so it is carried over rather than dropped —
@@ -332,6 +335,7 @@ function tryPlay(index: number): void {
   const { game } = session;
   if (won(game)) return;
   if (movesLeft(game) <= 0) {
+    Sound.nope();
     say('Out of moves — undo a move, or restart and try a different line.', 'is-warn');
     return;
   }
@@ -343,7 +347,14 @@ function tryPlay(index: number): void {
 
   if (won(game)) return finish();
 
+  /* Pitch rises with how much of the board you hold, so a game climbs as it
+     goes. Counted off the blob rather than the moves used, because a move
+     that takes forty cells should not sound like one that takes two. */
+  const held = blobOf(game).reduce((n, row) => n + row.filter(Boolean).length, 0);
+  if (gained.length) Sound.flood(held / (game.level.width * game.level.height));
+
   if (!gained.length) {
+    Sound.nope();
     say('That color was not touching the blob, so nothing moved — but the move is spent.', 'is-warn');
   } else if (movesLeft(game) === 0) {
     say('Out of moves, and the board is not one color yet. Undo, or restart.', 'is-warn');
@@ -471,6 +482,7 @@ function finish(): void {
     again.textContent = 'New puzzle';
     home.textContent = 'Home';
   }
+  Sound.win();
   openOverlay('overlay-win');
   say('Flooded in ' + used + '.', 'is-good');
 }
@@ -843,6 +855,18 @@ function wire(): void {
     btn.addEventListener('click', () => closeOverlay((btn as HTMLElement).dataset.close!));
   }
 
+  $('set-sound').addEventListener('click', () => {
+    saved.sound = !saved.sound;
+    Sound.on = saved.sound;
+    save();
+    paintSettings();
+    /* Turning it on says so — the switch is the one control whose effect is
+       otherwise not there to hear. Turning it off hands the device back at
+       once rather than after the idle timeout. */
+    if (saved.sound) Sound.tap();
+    else Sound.hush();
+  });
+
   $('set-marks').addEventListener('click', () => {
     saved.marks = !saved.marks;
     save();
@@ -883,6 +907,21 @@ function wire(): void {
     });
   }
 
+  /* Every button clicks, in one place rather than thirty. The board and the
+     picker are left out because they have their own voices — a move already
+     sounds, and a tap on top of it would double up. */
+  document.addEventListener('click', (e) => {
+    const el = (e.target as HTMLElement | null)?.closest('button');
+    if (!el) return;
+    if (el.closest('#board') || el.closest('#picker')) return;
+    /* No `disabled` check here, and that is deliberate twice over. A disabled
+       button never dispatches a click in the first place, so it would be dead
+       code — and worse than dead, because this runs on the way back up: Deal
+       and Undo both disable themselves in their own handlers, so by the time
+       the event arrived here they looked disabled and went silent. */
+    Sound.tap();
+  });
+
   window.addEventListener('keydown', (e) => {
     if (!$('overlay-win').hidden || !$('overlay-howto').hidden || !$('overlay-settings').hidden) {
       if (e.key === 'Escape') {
@@ -913,10 +952,12 @@ function wire(): void {
 }
 
 function paintSettings(): void {
-  const marks = $('set-marks');
-  marks.textContent = saved.marks ? 'On' : 'Off';
-  marks.setAttribute('aria-pressed', String(saved.marks));
+  for (const [id, on] of [['set-sound', saved.sound], ['set-marks', saved.marks]] as const) {
+    $(id).textContent = on ? 'On' : 'Off';
+    $(id).setAttribute('aria-pressed', String(on));
+  }
 }
 
+Sound.on = saved.sound;
 wire();
 paintRandomScreen();

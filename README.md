@@ -377,12 +377,13 @@ from, and `git push` is the deploy.
 | `src/campaign.ts` | The hand-drawn levels and the ramp behind them. |
 | `android/`, `ios/` | Capacitor projects, ready to open in Android Studio and Xcode. |
 | `src/palette.ts` | What a color index looks like. The generator never sees it. |
-| `src/app.ts` | The browser build. The only file in `src/` that knows a DOM exists. |
+| `src/app.ts` | The browser build. |
+| `src/sound.ts` | The blips. With `app.ts`, the only files in `src/` that know a DOM exists. |
 | `src/cli.ts` | Deals a board and prints it to a terminal. |
 
 `generator.ts`, `play.ts`, `levels.ts`, `campaign.ts` and `palette.ts` are all
 pure — no DOM, no storage, no clock — which is the point: a React Native build
-takes those five as they are and writes its own version of `app.ts`. `generator.ts` in particular imports nothing at all,
+takes those five as they are and rewrites only `app.ts` and `sound.ts`. `generator.ts` in particular imports nothing at all,
 and a test enforces it — the check strips the comments first, because the
 comments discuss `Math.random` at some length and a check that reads them
 finds exactly what it was written to forbid.
@@ -534,6 +535,37 @@ per-device, and clearing site data clears it.
 Tapping a **cell** plays that cell's color, which on a phone is much the
 fastest way in — you point at the region you want rather than hunting for it
 in the row of swatches.
+
+### Sound
+
+Four blips, ported from the sort game with the frequencies and durations
+unchanged, so the two sound like each other:
+
+| | | |
+|---|---|---|
+| Any button | 540 Hz triangle, 60ms | a tap |
+| A move | 320–580 Hz sine, 110ms | pitch rises with how much of the board you now hold |
+| A wasted or impossible move | 150 Hz sawtooth, 130ms | |
+| A win | 523 · 659 · 784 · 1047, 95ms apart | |
+
+There is not an audio file in the repository. Every sound is an oscillator and
+a gain envelope, which is also why the download does not grow.
+
+Two things in there are less obvious than they look. **The audio context is
+suspended when nothing has sounded for a second and a half**, and never opened
+at all while sound is off — an open output device hums audibly on a lot of
+hardware with nothing playing, so a switch that only stopped the blips would
+not actually be silence. And **the board and the picker are left out of the
+button sound**, because a move already has a voice; the tap would double up on
+top of it.
+
+The button sound is one delegated listener rather than thirty, and it
+deliberately does *not* check whether the button is disabled. A disabled
+button never dispatches a click, so the check would be dead code — and worse
+than dead: it runs on the way back up, and Deal and Undo both disable
+themselves in their own handlers, so they looked disabled by the time the
+event arrived and went silent. That was a real bug, found by counting
+oscillators in a browser rather than by listening.
 
 ### Color Blind Assist
 
