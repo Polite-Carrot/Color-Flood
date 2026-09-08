@@ -393,6 +393,13 @@ To ship for real, three files:
 | `android/app/src/main/AndroidManifest.xml` | `com.google.android.gms.ads.APPLICATION_ID` — the **app** ID |
 | `ios/App/App/Info.plist` | `GADApplicationIdentifier` — the **app** ID |
 
+Two things differ from the sort game, both because this is the plugin's v7
+line (Capacitor 7) and that is v8: the UMP debug-geography override takes a
+number here rather than a name, and `initializeForTesting` only registers the
+devices listed beside it — what actually forces test creatives is the test ad
+unit, and `isTesting`, which makes the plugin substitute its own test unit on
+any device not registered as a test device.
+
 Consent is handled before anything is requested: Google's UMP form where GDPR
 or an equivalent state law requires one, then iOS's App Tracking Transparency
 prompt, then the SDK — in that order, at boot, so both land while the player

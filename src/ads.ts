@@ -65,17 +65,22 @@ const INTERSTITIAL = {
   ios: 'ca-app-pub-3940256099942544/4411468910',
 };
 
-/* Anything under Google's test publisher gets isTesting on every request, so
-   the SDK routes to test creatives and cannot count a developer's own taps
-   against a real account. Real units skip the flag and get real fills. This
-   is derived rather than configured so the two can never disagree. */
+/* Anything under Google's test publisher gets isTesting on every request.
+   The flag is not decoration: the plugin swaps in its own test unit when it
+   is set and the device is not a registered test device, so a build cannot
+   count a developer's own taps against a real account. Real units skip the
+   flag and get real fills. Derived rather than configured, so the ID and the
+   flag can never disagree with each other. */
 const TEST_PUBLISHER = 'ca-app-pub-3940256099942544';
 const isTestUnit = (id: string): boolean => id.startsWith(TEST_PUBLISHER);
 
 /* UMP decides whether the GDPR form is needed from the device's real
-   location. For testing somewhere it is not needed, 'EEA' forces the form up
-   and 'NOT_EEA' forces it away. Null in anything shipped. */
-const DEBUG_GEOGRAPHY: string | null = null;
+   location. To see the form somewhere it is not required, this overrides the
+   lookup: 1 makes the device look like it is in the EEA, 3 like a regulated
+   US state, 0 turns the override off. A NUMBER, not a name — the plugin took
+   strings at v8, which is what the sort game is on, and this is v7. Null in
+   anything shipped. */
+const DEBUG_GEOGRAPHY: number | null = null;
 
 type Plugin = {
   initialize(o: unknown): Promise<unknown>;
