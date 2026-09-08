@@ -19,7 +19,7 @@ import {
 } from './levels.ts';
 import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from './campaign.ts';
 import { Sound } from './sound.ts';
-import { Ads } from './ads.ts';
+import { Ads, startAdPreview } from './ads.ts';
 
 /* ------------------------------------------------------------------ scaffolding */
 
@@ -981,3 +981,6 @@ paintRandomScreen();
    prompt land while the player is still looking at the home screen, and the
    first interstitial is warm long before anything is allowed to show it. */
 Ads.start();
+/* Only ever with ?ads=preview in the URL. Draws an empty box the size of the
+   banner so the layout can be looked at without a phone build. */
+startAdPreview();

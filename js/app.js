@@ -13,7 +13,7 @@ import { blobOf, blobColour, canPlay, movesLeft, play, restart, start, undo, won
 import { MODES, bestStreakOf, dailySeed, dailySetting, dayKey, firstDailyDate, isPlayableDay, modeLabel, optionsFor, settingFor, settingsFor, streakOf, } from "./levels.js";
 import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from "./campaign.js";
 import { Sound } from "./sound.js";
-import { Ads } from "./ads.js";
+import { Ads, startAdPreview } from "./ads.js";
 /* ------------------------------------------------------------------ scaffolding */
 const $ = (id) => {
     const el = document.getElementById(id);
@@ -908,3 +908,6 @@ paintRandomScreen();
    prompt land while the player is still looking at the home screen, and the
    first interstitial is warm long before anything is allowed to show it. */
 Ads.start();
+/* Only ever with ?ads=preview in the URL. Draws an empty box the size of the
+   banner so the layout can be looked at without a phone build. */
+startAdPreview();

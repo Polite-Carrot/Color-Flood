@@ -85,8 +85,43 @@ body {
   padding:
     calc(18px + env(safe-area-inset-top))
     calc(16px + env(safe-area-inset-right))
-    calc(16px + env(safe-area-inset-bottom))
+    /* --ad-h is the banner. It is 0 everywhere except a phone build with an
+       ad on screen: the plugin draws the banner as a native view OVER the
+       page rather than resizing it, so this is the only thing standing
+       between the color swatches and having an ad sit on top of them. */
+    calc(16px + env(safe-area-inset-bottom) + var(--ad-h, 0px))
     calc(16px + env(safe-area-inset-left));
+}
+
+/* The stand-in for the banner, drawn only under ?ads=preview. Sized and
+   placed exactly where the native one lands — above the home indicator,
+   centred, 320x50 — so what it shows about the layout is true. */
+.ad-preview {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: env(safe-area-inset-bottom);
+  height: 50px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, .55);
+  border-top: 2px dashed rgba(43, 45, 66, .35);
+  pointer-events: none;
+}
+.ad-preview span {
+  width: 320px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  background: repeating-linear-gradient(
+    -45deg, rgba(43, 45, 66, .06) 0 8px, rgba(43, 45, 66, .12) 8px 16px);
+  border: 2px dashed rgba(43, 45, 66, .5);
+  border-radius: 4px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
 }
 
 .screen { display: none; flex: 1; min-height: 0; }

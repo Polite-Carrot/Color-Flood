@@ -341,9 +341,53 @@ dependency inside the app.
 
 ### Ads
 
-One format, interstitial, through `@capacitor-community/admob` — the same
-plugin and the same cadence as the sort game. One fires when **both** of these
-have happened since the last one:
+Two formats, through `@capacitor-community/admob`: a **banner** along the
+bottom, and an **interstitial** on the same cadence as the sort game.
+
+#### The banner
+
+320×50 — the small MMA strip — centred at the bottom, shown once at boot and
+left there. A banner that came and went would move the board under the
+player's thumb every time it did.
+
+It is drawn **natively, as a subview over the web view**, on both platforms —
+that is the plugin's own source, not a guess. It does not resize the page
+underneath it, so nothing reserves that strip unless the page does: the height
+the plugin reports in `bannerAdSizeChanged` goes into a `--ad-h` custom
+property, `.app`'s bottom padding is written in terms of it, and the board
+re-measures. Without that the banner would sit on top of the color swatches.
+The height comes from the event rather than being assumed to be 50, so an
+adaptive banner would fit too — and a banner that never fills puts the space
+back.
+
+What it costs, measured, on the Extra Hard 14×14:
+
+| Screen | No banner | With banner |
+|--------|-----------|-------------|
+| 375×667 (iPhone SE 2) | 350px board, 23.6px a cell | 294px, 19.6px a cell |
+| 393×852 (iPhone 15/16 Pro) | 364px, 24.6px a cell | **unchanged** |
+
+Taller phones pay nothing: the board there is limited by the width of the
+screen, not its height, so the banner comes out of space the board was not
+using. The SE pays a cell size for it.
+
+`ADAPTIVE_BANNER` is the other sensible size — full width instead of a 320px
+box with a gap either side, and a little taller for it. One word in `ads.ts`.
+
+**Seeing it without a phone.** The banner is native, so github.io cannot show
+one, and "does the layout still work with a banner in it" would otherwise need
+a TestFlight build to answer. So `?ads=preview` draws an empty box of exactly
+the size and in exactly the position the real banner lands, reserves the same
+space, and says on its face that it is a placeholder. Off unless the flag is
+in the URL, never an ad, and it never asks Google for anything:
+
+```
+https://polite-carrot.github.io/Color-Flood/?ads=preview
+```
+
+#### The interstitial
+
+One fires when **both** of these have happened since the last one:
 
 - at least **two minutes** of wall-clock time, **and**
 - at least **three puzzles finished**.
@@ -389,7 +433,7 @@ To ship for real, three files:
 
 | File | What to change |
 |------|----------------|
-| `src/ads.ts` | `INTERSTITIAL` — the Android and iOS **ad unit** IDs |
+| `src/ads.ts` | `INTERSTITIAL` and `BANNER` — the Android and iOS **ad unit** IDs |
 | `android/app/src/main/AndroidManifest.xml` | `com.google.android.gms.ads.APPLICATION_ID` — the **app** ID |
 | `ios/App/App/Info.plist` | `GADApplicationIdentifier` — the **app** ID |
 

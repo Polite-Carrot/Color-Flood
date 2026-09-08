@@ -64,6 +64,33 @@ const INTERSTITIAL = {
   android: 'ca-app-pub-3940256099942544/1033173712',
   ios: 'ca-app-pub-3940256099942544/4411468910',
 };
+const BANNER = {
+  android: 'ca-app-pub-3940256099942544/6300978111',
+  ios: 'ca-app-pub-3940256099942544/2934735716',
+};
+
+/* BANNER is the 320x50 one — the small strip, and the size asked for.
+   ADAPTIVE_BANNER is the other sensible choice: it fills the width of the
+   phone rather than sitting in a 320px box with a gap either side on anything
+   wider, and is a little taller for it. Swapping this one word is the whole
+   difference. */
+const BANNER_SIZE = 'BANNER';
+
+/* The banner is drawn NATIVELY, as a subview over the web view — on both
+   platforms, checked in the plugin's own source. It does not resize the page
+   underneath it, so nothing reserves that strip unless we do: the height the
+   plugin reports goes into --ad-h, the app's bottom padding is written in
+   terms of it, and the board re-measures. Without that the banner sits on top
+   of the color swatches. */
+const AD_HEIGHT = '--ad-h';
+
+function reserve(px: number): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.style.setProperty(AD_HEIGHT, px + 'px');
+  /* app.ts already re-measures on resize, and the board's size depends on the
+     height this just took away. */
+  window.dispatchEvent(new Event('resize'));
+}
 
 /* Anything under Google's test publisher gets isTesting on every request.
    The flag is not decoration: the plugin swaps in its own test unit when it
@@ -84,6 +111,9 @@ const DEBUG_GEOGRAPHY: number | null = null;
 
 type Plugin = {
   initialize(o: unknown): Promise<unknown>;
+  showBanner(o: unknown): Promise<unknown>;
+  removeBanner(): Promise<unknown>;
+  addListener(event: string, fn: (info: { height?: number }) => void): Promise<unknown>;
   requestConsentInfo(o: unknown): Promise<{ status?: string; isConsentFormAvailable?: boolean }>;
   showConsentForm(): Promise<unknown>;
   trackingAuthorizationStatus(): Promise<{ status?: string }>;
@@ -108,6 +138,7 @@ export const Ads = {
   ready: false,
   starting: null as Promise<boolean> | null,
   unit: '',
+  bannerUnit: '',
   /* Personalised by default; a privacy switch would flip this. When off, npa
      goes on every request so Google serves non-personalised ads even where
      UMP recorded a consent. */
@@ -141,6 +172,7 @@ export const Ads = {
     const c = cap()!;
     const platform = (c.getPlatform && c.getPlatform()) === 'ios' ? 'ios' : 'android';
     this.unit = INTERSTITIAL[platform];
+    this.bannerUnit = BANNER[platform];
 
     /* Order matters. UMP first, since it works out whether this is a consent
        jurisdiction and takes the answer; then iOS's tracking prompt; then the
@@ -196,6 +228,38 @@ export const Ads = {
     return this.loading;
   },
 
+  /* The strip along the bottom. Shown once, at boot, and left there: a banner
+     that came and went would move the board under the player's thumb every
+     time it did. */
+  async showBanner(): Promise<boolean> {
+    if (!(await this.init())) return false;
+    try {
+      /* The plugin reports the real height once the ad is measured — 50 for
+         a 320x50, more for an adaptive one, and 0 if it never fills. Taking
+         it from the event rather than assuming 50 is what keeps the layout
+         right for either size, and what puts the space back when there is no
+         ad to show. */
+      await this.plugin!.addListener('bannerAdSizeChanged', (info) => {
+        reserve(typeof info?.height === 'number' ? info.height : 0);
+      });
+      await this.plugin!.addListener('bannerAdFailedToLoad', () => reserve(0));
+
+      const opts: Record<string, unknown> = {
+        adId: this.bannerUnit,
+        adSize: BANNER_SIZE,
+        position: 'BOTTOM_CENTER',
+        margin: 0,
+        isTesting: isTestUnit(this.bannerUnit),
+      };
+      if (!this.personalised) opts['npa'] = true;
+      await this.plugin!.showBanner(opts);
+      return true;
+    } catch {
+      reserve(0);
+      return false;
+    }
+  },
+
   /* Called once per puzzle finished. */
   noteWin(): void {
     if (!this.native()) return;
@@ -239,7 +303,38 @@ export const Ads = {
      tracking prompt happen while the player is still on the home screen, and
      the first interstitial is warm long before the third win. */
   start(): void {
+    if (preview()) return;
     if (!this.native()) return;
-    void this.init().then((ok) => { if (ok) void this.load(); });
+    void this.init().then((ok) => {
+      if (!ok) return;
+      void this.showBanner();
+      void this.load();
+    });
   },
 };
+
+/* ─── seeing it without a phone ───
+   The banner is native, so the web build cannot show one: on github.io the
+   plugin is not there and nothing appears. That makes "how does the layout
+   look with a banner in it" a question you would otherwise need a TestFlight
+   build to answer, which is a slow way to check that the swatches still fit.
+   
+   So: ?ads=preview draws an EMPTY BOX of exactly the size the real banner
+   would take, reserves the same space, and says on its face that it is a
+   placeholder. It is off unless the flag is in the URL, it is never an ad,
+   and it never asks Google for anything. */
+function preview(): boolean {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('ads') === 'preview';
+}
+
+export function startAdPreview(): void {
+  if (!preview() || typeof document === 'undefined') return;
+  const box = document.createElement('div');
+  box.className = 'ad-preview';
+  /* 320x50 is the MMA banner. The strip is the width of the screen because
+     that is what the space costs; the box inside it is the ad. */
+  box.innerHTML = '<span>Ad preview &middot; 320&times;50</span>';
+  document.body.append(box);
+  reserve(50);
+}
