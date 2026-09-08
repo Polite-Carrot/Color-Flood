@@ -184,11 +184,23 @@ input:focus-visible {
   line-height: .98;
   letter-spacing: -.01em;
   color: #fff;
-  /* Stroke behind the fill, then a hard drop below: cartoon lettering. The
-     stroke has to shrink with the type or a small title turns into a blob. */
-  -webkit-text-stroke: clamp(4px, min(1vw, .9vh), 7px) var(--ink);
+  /* Stroke behind the fill, then a hard drop below: cartoon lettering.
+     
+     Both in em, which is the whole point. They used to be sized off the
+     viewport — the stroke off min(1vw, .9vh) and the drop off .9vh alone —
+     while the type is sized off min(9vw, 7.4vh). Three different rulers for
+     one piece of lettering, and on a tall narrow phone they came apart: at
+     390px wide the type landed at 35px with a 7px drop under it, a fifth of
+     the font. The shadow stopped reading as a shadow and started filling the
+     counters of the o's, so the word looked double-decked.
+     
+     In em they cannot drift, because there is only one ruler. .11 and .085
+     were picked by rendering the title against .095/.095 (the sort game's
+     proportions at full size) and a few neighbours: this keeps that game's
+     chunk while leaving the bowls of the letters open. */
+  -webkit-text-stroke: .11em var(--ink);
   paint-order: stroke fill;
-  text-shadow: 0 clamp(4px, .9vh, 7px) 0 var(--ink);
+  text-shadow: 0 .085em 0 var(--ink);
   text-wrap: balance;
 }
 .masthead__tag {

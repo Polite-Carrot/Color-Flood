@@ -352,7 +352,17 @@ landscape, three screens between them were hiding up to 272px of themselves.
 So the lockup, the cards and the calendar are sized against the **shorter** of
 the two axes — `min(9vw, 7.4vh)` rather than `9vw`, all the way down — which
 is what stops a title that is fine on a tall phone from filling the screen on
-the same phone turned sideways. Every screen now fits exactly at every size
+the same phone turned sideways.
+
+The masthead's stroke and drop shadow are in **em**, though, not viewport
+units, and that is a separate lesson. They started out sized off the viewport
+like everything else — the stroke off `min(1vw, .9vh)`, the drop off `.9vh`
+alone — while the type was sized off `min(9vw, 7.4vh)`. Three rulers for one
+piece of lettering, and on a tall narrow phone they came apart: at 390px wide
+the title landed at 35px with a 7px drop under it, a fifth of the font. It
+stopped reading as a shadow and started filling the counters of the o's. In em
+there is only one ruler, so the stroke is 11% of the type and the drop 8.5% of
+it at every window size from a 320px phone to a desktop. Every screen now fits exactly at every size
 tested, portrait and landscape, with one exception: a phone held sideways
 (844×390) still runs about 20px over on the calendar. That one scrolls rather
 than clips.
