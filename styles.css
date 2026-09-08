@@ -735,7 +735,10 @@ input:focus-visible {
 /* The mark is there so the board is readable without relying on colour alone.
    It is deliberately faint: on a solved board it is the only thing left to
    look at, and a grid of hard black letters is not a reward. */
-.cell span { opacity: .5; pointer-events: none; }
+/* Legible, not decorative. This letter is the whole of the colour blind
+   assist, and at the half-opacity it used to wear it was ornament — readable
+   if you already knew what it said. */
+.cell span { opacity: .9; pointer-events: none; }
 .board.no-marks .cell span { display: none; }
 
 /* Cells that just changed hands. A short pop, not a long one: at Expert a
@@ -800,7 +803,10 @@ input:focus-visible {
   transform: translateY(var(--lift));
   box-shadow: 0 0 0 var(--ink-faint);
 }
-.swatch span { opacity: .6; }
+.swatch span { opacity: .85; }
+/* The picker needs the letters for the same reason the board does, so the one
+   switch governs both. */
+.picker.no-marks .swatch span { display: none; }
 
 /* The colour a hint just named. It pulses rather than simply lighting up,
    because the row is already six saturated squares and a static highlight on
@@ -920,20 +926,32 @@ input:focus-visible {
 .howto li { margin-bottom: 10px; }
 .howto b { color: var(--ink); }
 
-.settings-list { display: grid; gap: 10px; margin-top: 18px; text-align: left; }
+.settings-list { display: grid; gap: 12px; margin-top: 20px; text-align: left; }
+/* Each row is a card in its own right — the same paper, ink and weight as
+   everything else on the screen, rather than a hairline rule pretending to be
+   a list. It is what the sort game's settings look like, and the two should
+   not need explaining to each other. */
 .settings-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 14px;
-  border: 2px solid var(--ink-faint);
-  border-radius: 13px;
+  padding: 12px 16px;
+  background: var(--paper-warm);
+  border: var(--stroke) solid var(--ink);
+  border-radius: 15px;
 }
+/* The one row that destroys something wears its own colour, and says so twice:
+   the label is red and so is the border. */
 .settings-row--danger { border-color: var(--danger); }
 .settings-row--danger > span { color: var(--danger); }
-.settings-row > span { font-weight: 700; }
-.settings-row .btn { padding: 7px 14px; font-size: 15px; }
+.settings-row > span {
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 17px;
+  line-height: 1.15;
+}
+.settings-row .btn { padding: 8px 16px; font-size: 16px; flex: none; }
 .settings-row .btn[aria-pressed="true"] { background: var(--gold); }
 
 /* ───────── short windows ─────────

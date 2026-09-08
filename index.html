@@ -174,6 +174,7 @@
       <button id="hint" class="btn">Hint</button>
       <button id="restart" class="btn">Restart</button>
       <button id="again" class="btn btn--quiet">New puzzle</button>
+      <button id="game-settings" class="btn btn--quiet">Settings</button>
     </div>
 
     <p id="status" class="status" role="status" aria-live="polite">&nbsp;</p>
@@ -207,6 +208,7 @@
       <li>Win by turning the <b>whole board</b> one color.</li>
       <li><b>Par</b> is the fewest moves that will finish the board. You are given par plus a little, and on the hardest settings you are given par exactly.</li>
       <li>Undo and restart are free. Use them.</li>
+      <li>Every cell carries its color's initial &mdash; <b>Color Blind Assist</b>, on by default and switchable in Settings. It is not decoration: blue and purple are all but identical to a red&ndash;green color blind player, and the letter is what tells them apart.</li>
       <li>You get <b>two hints</b> a puzzle. A hint names a color that is on a best line from wherever you have got to &mdash; and it does not cost you a move. Restarting does not give them back.</li>
     </ol>
     <p class="modal__line">The trap is the biggest grab. Taking whichever color swallows the most board, every turn, gets you close — and on the harder settings it will leave you a move or two short. Look for the move that opens up two regions at once rather than the one that eats the most now.</p>
@@ -221,12 +223,12 @@
     <h2 id="settings-title">Settings</h2>
     <div class="settings-list">
       <div class="settings-row">
-        <span>Letters on cells</span>
+        <span>Color Blind Assist</span>
         <button id="set-marks" class="btn" type="button" aria-pressed="true">On</button>
       </div>
       <div class="settings-row settings-row--danger">
-        <span>Campaign progress</span>
-        <button id="set-wipe" class="btn" type="button">Reset</button>
+        <span>Reset progress</span>
+        <button id="set-wipe" class="btn" type="button">Erase&hellip;</button>
       </div>
     </div>
     <p class="modal__note" id="settings-note"></p>

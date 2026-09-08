@@ -112,6 +112,7 @@ function buildBoard(level) {
     board.replaceChildren();
     board.style.gridTemplateColumns = 'repeat(' + level.width + ', 1fr)';
     board.classList.toggle('no-marks', !saved.marks);
+    $('picker').classList.toggle('no-marks', !saved.marks);
     cells = [];
     for (let r = 0; r < level.height; r++) {
         for (let c = 0; c < level.width; c++) {
@@ -754,7 +755,13 @@ function wire() {
             show('screen-home');
     });
     $('how-to').addEventListener('click', () => openOverlay('overlay-howto'));
-    $('settings').addEventListener('click', () => { paintSettings(); openOverlay('overlay-settings'); });
+    /* Settings is reachable from the board as well as from home. Colour Blind
+       Assist is the reason: the moment somebody wants it is the moment they are
+       looking at a board they cannot read, and making them back out to the home
+       screen to find it is making them do it blind. */
+    for (const id of ['settings', 'game-settings']) {
+        $(id).addEventListener('click', () => { paintSettings(); openOverlay('overlay-settings'); });
+    }
     for (const btn of document.querySelectorAll('[data-close]')) {
         btn.addEventListener('click', () => closeOverlay(btn.dataset.close));
     }
@@ -763,12 +770,40 @@ function wire() {
         save();
         paintSettings();
         $('board').classList.toggle('no-marks', !saved.marks);
+        $('picker').classList.toggle('no-marks', !saved.marks);
     });
+    /* Erasing takes two presses. Two hundred levels of progress is a real thing
+       to lose to a mis-tap, and the ellipsis on the button is a promise that
+       something comes next — so something does. Any other press, or closing the
+       panel, forgets that it was ever asked. */
+    let armed = false;
+    const disarm = () => {
+        armed = false;
+        $('set-wipe').textContent = 'Erase…';
+        $('set-wipe').classList.remove('btn--primary');
+    };
     $('set-wipe').addEventListener('click', () => {
+        if (!armed) {
+            armed = true;
+            $('set-wipe').textContent = 'Sure?';
+            $('set-wipe').classList.add('btn--primary');
+            $('settings-note').textContent =
+                'This erases both campaigns and every daily. It cannot be undone.';
+            return;
+        }
         saved.progress = { flood: blankProgress(), merge: blankProgress() };
+        saved.days = [];
         save();
-        $('settings-note').textContent = 'Both campaigns reset to level 1.';
+        disarm();
+        $('settings-note').textContent = 'Progress erased.';
     });
+    $('set-marks').addEventListener('click', disarm);
+    for (const id of ['settings', 'game-settings']) {
+        $(id).addEventListener('click', () => {
+            disarm();
+            $('settings-note').textContent = '';
+        });
+    }
     window.addEventListener('keydown', (e) => {
         if (!$('overlay-win').hidden || !$('overlay-howto').hidden || !$('overlay-settings').hidden) {
             if (e.key === 'Escape') {

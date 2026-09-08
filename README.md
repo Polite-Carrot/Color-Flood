@@ -533,9 +533,41 @@ per-device, and clearing site data clears it.
 
 Tapping a **cell** plays that cell's color, which on a phone is much the
 fastest way in — you point at the region you want rather than hunting for it
-in the row of swatches. Every cell also carries its color's initial, faintly,
-so the board can be read without relying on color alone; that can be turned
-off in Settings.
+in the row of swatches.
+
+### Color Blind Assist
+
+Every cell and every swatch carries its color's initial. It is on by default,
+and it is not decoration.
+
+Simulating this palette against the three common color vision deficiencies
+(Viénot–Brettel–Mollon, compared in CIE Lab) says why:
+
+| | Closest pair | ΔE |
+|---|---|---|
+| Normal vision | blue / purple | 36.8 |
+| Protanopia | **blue / purple** | **7.5** |
+| Deuteranopia | **blue / purple** | **9.2** |
+| Deuteranopia | yellow / orange | 14.4 |
+| Tritanopia | blue / green | 18.4 |
+
+Below about 20 a pair is hard to tell apart; below 10 it is the same color.
+Blue and purple are in play from Normal upward and in every Merge setting past
+Easy, so for a red–green color blind player — around one man in twelve — those
+boards are unreadable without the letters. That is the whole argument for the
+default, and for drawing them to be read rather than to be tasteful: they used
+to sit at half opacity, which is legible only if you already know what it
+says.
+
+The palette itself is left alone, hex for hex, because it is the sort game's
+and the two are meant to look like they came from the same place. A
+color-blind-safe palette is possible — the best six-color set I could find
+that keeps the cartoon look scores ΔE 23.5 at worst against 7.5 — but it would
+break that tie, so it is an option rather than a change.
+
+Settings is reachable from the board as well as from the home screen, because
+the moment somebody wants this switch is the moment they are looking at a
+board they cannot read.
 
 ## What the tests are actually for
 
