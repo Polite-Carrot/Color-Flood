@@ -722,8 +722,25 @@ input:focus-visible {
   flex: 1;
   min-height: 0;
   display: grid;
+  /* A square board on a tall phone cannot use all the height it is given —
+     at 390x844 there are spare pixels whatever is done, because the board is
+     limited by the width. The only question is where they go, and the answer
+     is: shared out, not pooled. Bottom-aligning the board was tried and put
+     the whole surplus in one band under the heading, which looked worse than
+     the two it replaced. So it stays centred and the gaps below grow with the
+     window instead, until what is left over reads as spacing rather than as a
+     hole. */
   place-items: center;
   margin-bottom: 14px;
+  /* The board reaches past the app's side padding.
+     
+     It is square, so on a phone it is limited by the WIDTH and nothing else —
+     a 390px screen with 16px padding a side left a 14x14 board at 350px and
+     135px of unusable height above and below it. Height cannot help a square
+     board, so the only way to make the squares bigger is to give it more
+     width, and the padding was the only width left to give. Every other
+     screen keeps its comfortable margins; this is the one that is all board. */
+  margin-inline: -8px;
 }
 .board {
   display: grid;
@@ -1000,6 +1017,54 @@ input:focus-visible {
 }
 .settings-row .btn { padding: 8px 16px; font-size: 16px; flex: none; }
 .settings-row .btn[aria-pressed="true"] { background: var(--gold); }
+
+/* ───────── tall windows ─────────
+   Where the surplus goes.
+
+   The board is square, so on a phone it is limited by the width and a tall
+   screen has height it cannot use — 121px spare at 390x844 even with the
+   board at its widest. Spending that on the gaps is right, but ONLY here:
+   the same spacing on a short window comes straight out of the board, which
+   is height-limited there instead. Measured, growing the gaps continuously
+   with vh cost a 700px-tall screen a whole step of cell size — the board
+   quantises to whole pixels per cell, so it drops 14px at a time on a 14-wide
+   board and there is no such thing as a small loss.
+
+   Hence a threshold rather than a clamp: below it, every pixel goes to the
+   board; above it, there are pixels to spare and they go to the spacing. */
+@media (min-height: 780px) {
+  .topbar { margin-bottom: 20px; }
+  .board-wrap { margin-bottom: 24px; }
+  .toolbar { margin-top: 26px; }
+  .status { margin-top: 18px; }
+  /* A bigger target, since there is room for one. */
+  .swatch { max-width: 60px; }
+}
+@media (min-height: 900px) {
+  .topbar { margin-bottom: 26px; }
+  .board-wrap { margin-bottom: 30px; }
+  .toolbar { margin-top: 32px; }
+  .status { margin-top: 22px; }
+  .swatch { max-width: 66px; }
+}
+
+/* ───────── short windows, on the game screen ─────────
+   The mirror of the block above. Where a tall window has height the board
+   cannot use, a short one has none to spare and the board is the thing
+   starved: measured on a 320x568 phone, a 7x7 board came out 21px a cell
+   with the width able to afford 43. Every pixel taken off the chrome here
+   goes straight into the squares, so the gaps close up and the status line
+   keeps its two reserved lines at a smaller size rather than losing them —
+   a status that can change height would resize the board mid-game. */
+@media (max-height: 700px) {
+  .topbar { margin-bottom: 8px; }
+  .subline { margin-bottom: 6px; }
+  .board-wrap { margin-bottom: 8px; }
+  .toolbar { margin-top: 10px; gap: 8px; }
+  .toolbar .btn { padding: 9px 14px; }
+  .status { font-size: 13.5px; min-height: 2.4em; margin-top: 8px; }
+  .swatch { max-width: 48px; }
+}
 
 /* ───────── short windows ─────────
    Everything above scales with the height it is given, so this is only for

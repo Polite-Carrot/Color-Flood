@@ -551,8 +551,41 @@ row of chrome that wraps comes straight out of the board. On a 390px phone an
 Extra Hard 14×14 was down to **17px a cell**: the six colors had wrapped onto
 three rows, and the setting-and-par line had wrapped inside a title column
 only 88px wide, orphaning a line that read "· par 12". Moving that line out of
-the topbar and making the colors share one row instead of wrapping put the
-same board back up to 22px a cell.
+the topbar and making the colors share one row put it back to 22px, and the
+sizing below took it to **26px** — half again as big as it was.
+
+### Why the board is the size it is
+
+It is **square**, so on a phone it is limited by the width and nothing else,
+and that single fact runs both ways.
+
+On a **tall** screen there is height the board cannot use — 121px spare at
+390×844 even with the board at its widest — so the only thing to decide is
+where the surplus goes. Bottom-aligning the board was tried and pooled the
+whole lot into one band under the heading, which looked worse than the two it
+replaced. It stays centred and the gaps around the controls grow instead,
+until what is left reads as spacing rather than a hole.
+
+On a **short** screen there is none to spare and the board is what starves: a
+7×7 came out 21px a cell on a 320×568 phone while the width could have
+afforded 43. There, every pixel taken off the chrome goes into the squares.
+
+So the spacing is gated on a height threshold rather than scaled smoothly.
+Growing the gaps continuously with `vh` was tried first and cost a 700px-tall
+window a whole step of cell size — the board quantises to whole pixels per
+cell, so on a 14-wide board it moves 14px at a time and there is no such thing
+as a small loss. Below the threshold every pixel goes to the board; above it,
+to the spacing.
+
+| Window | Easy 7×7 | Extra Hard 14×14 |
+|---|---|---|
+| 320×568 | 36px a cell | 18px |
+| 390×700 | 53px | 26px |
+| 430×932 | 58px | 29px |
+| 768×1024 | 92px | 46px |
+
+The board also reaches past the app's side padding, because on a phone that
+padding was the only width left to give it.
 
 ### Sound
 

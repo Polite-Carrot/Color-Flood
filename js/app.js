@@ -153,7 +153,11 @@ function sizeBoard() {
     const room = Math.min(wrap.clientWidth, wrap.clientHeight);
     if (room <= 0)
         return;
-    const per = Math.max(12, Math.floor((room - 8) / Math.max(level.width, level.height)));
+    /* Two pixels of slack, not eight. The board is quantised — a whole pixel
+       per cell means it grows in steps of one cell-count, 14px at a time on a
+       14-wide board — so anything held back here is likely to cost a whole step
+       rather than the pixels themselves. */
+    const per = Math.max(12, Math.floor((room - 2) / Math.max(level.width, level.height)));
     const board = $('board');
     board.style.width = per * level.width + 'px';
     board.style.height = per * level.height + 'px';
