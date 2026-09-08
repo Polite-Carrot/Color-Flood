@@ -142,6 +142,23 @@ body {
      content fits, which is the usual case. */
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* ...and a scroll box CLIPS. CSS will not let one axis scroll while the
+     other overflows visibly, so overflow-y: auto quietly makes overflow-x
+     auto too, and this box cuts everything off at its padding edge.
+
+     .board-wrap reaches 8px outside that edge on purpose — the board is
+     square and limited by the width, so the side padding is the only width
+     left to give it. What landed outside the clip was the 3px the board wears
+     as a border: measured on a 393px phone the board sat at 12.5–380.5 and
+     the clip ran 16–377, so its left and right sides were cut away entirely
+     while its top and bottom kept theirs. A board with an outline on two
+     sides looks like a board running off the screen.
+
+     Widening the padding box by the same 8px and pulling it back with a
+     negative margin moves the clip and nothing else: every screen's content
+     box is exactly where it was. */
+  margin-inline: -8px;
+  padding-inline: 8px;
 }
 @keyframes rise {
   from { opacity: 0; transform: translateY(14px) scale(.985); }
@@ -553,6 +570,23 @@ input:focus-visible {
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* ...and a scroll box CLIPS. CSS will not let one axis scroll while the
+     other overflows visibly, so overflow-y: auto quietly makes overflow-x
+     auto too, and this box cuts everything off at its padding edge.
+
+     .board-wrap reaches 8px outside that edge on purpose — the board is
+     square and limited by the width, so the side padding is the only width
+     left to give it. What landed outside the clip was the 3px the board wears
+     as a border: measured on a 393px phone the board sat at 12.5–380.5 and
+     the clip ran 16–377, so its left and right sides were cut away entirely
+     while its top and bottom kept theirs. A board with an outline on two
+     sides looks like a board running off the screen.
+
+     Widening the padding box by the same 8px and pulling it back with a
+     negative margin moves the clip and nothing else: every screen's content
+     box is exactly where it was. */
+  margin-inline: -8px;
+  padding-inline: 8px;
 }
 
 .tile {

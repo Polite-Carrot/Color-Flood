@@ -471,6 +471,18 @@ gate be tested in Node.
 
 Nothing scrolls that should not, and nothing is ever cut off.
 
+One thing was, for a while: the board's left and right sides had no outline
+on a phone, while its top and bottom did. `overflow-y: auto` on the screen —
+there so that a window shorter than any measured phone scrolls rather than
+hiding the buttons — quietly makes `overflow-x: auto` as well, because CSS
+will not let one axis scroll while the other overflows visibly. That turns
+the screen into a box that CLIPS at its padding edge, and `.board-wrap`
+deliberately reaches 8px past that edge to buy the board width. Measured on
+a 393px phone: board at 12.5–380.5, clip at 16–377, so the 3px of border on
+each side was cut away entirely. The fix widens the clip box by the same 8px
+and pulls it back with a negative margin, which moves the clip and nothing
+else.
+
 Those are different problems and the second is worse. A screen that scrolls at
 least tells you there is more; a screen that clips just quietly has no Play
 button on it. Measured across seven window sizes from a 320×568 phone to a
