@@ -741,16 +741,7 @@ function wire() {
     }
     /* Back out of a campaign level to its grid rather than to the home screen —
        the next thing wanted after level 12 is almost always level 13. */
-    $('back').addEventListener('click', () => {
-        if (session?.campaign)
-            showLevels(session.campaign.mode);
-        else if (session?.kind === 'daily') {
-            paintDailyScreen();
-            show('screen-daily');
-        }
-        else
-            show('screen-home');
-    });
+    $('back').addEventListener('click', leaveBoard);
     $('difficulty').addEventListener('input', (e) => {
         const list = settingsFor(saved.mode);
         saved.difficulty = list[Number(e.target.value)].key;
@@ -906,20 +897,19 @@ function wire() {
         Sound.tap();
     });
     window.addEventListener('keydown', (e) => {
-        /* The privacy sheet is deliberately not in this list: Escape would close
-           it with neither answer recorded, and it would be asked again on the next
-           load. Save is the only way out of it. */
-        if (!$('overlay-win').hidden || !$('overlay-howto').hidden || !$('overlay-settings').hidden) {
-            if (e.key === 'Escape') {
-                for (const id of ['overlay-win', 'overlay-howto', 'overlay-settings'])
-                    closeOverlay(id);
-            }
+        if (!$('overlay-win').hidden || !$('overlay-howto').hidden || !$('overlay-settings').hidden
+            || !$('overlay-privacy').hidden) {
+            if (e.key === 'Escape')
+                goBack();
             return;
         }
-        if (!$('screen-game').classList.contains('is-active'))
+        if (!$('screen-game').classList.contains('is-active')) {
+            if (e.key === 'Escape')
+                goBack();
             return;
+        }
         if (e.key === 'Escape')
-            return void $('back').click();
+            return void goBack();
         if (e.key === 'u' || e.key === 'U')
             return void $('undo').click();
         if (e.key === 'h' || e.key === 'H')
@@ -941,6 +931,47 @@ function wire() {
     window.addEventListener('resize', measure);
     window.visualViewport?.addEventListener('resize', measure);
     measure();
+}
+/* ------------------------------------------------------------------ going back */
+function leaveBoard() {
+    if (session?.campaign)
+        showLevels(session.campaign.mode);
+    else if (session?.kind === 'daily') {
+        paintDailyScreen();
+        show('screen-daily');
+    }
+    else
+        show('screen-home');
+}
+/* One step back, wherever that is from here. Escape calls it, the Menu button
+   calls its board half, and on Android the hardware back button calls it —
+   which is the whole reason it is a function rather than three handlers.
+   
+   Returns false when there is nowhere left to go, which is the home screen
+   with nothing open. That is the only place Android is allowed to close the
+   app, and without a listener it is the ONLY thing the button does: Capacitor
+   has no back handling of its own, so the Activity's default applies and back
+   quits from any screen, mid-puzzle included. */
+function goBack() {
+    /* The privacy sheet is deliberately not in this list. Dismissing it with
+       neither answer recorded means asking again next launch, which teaches
+       people to dismiss it faster. */
+    for (const id of ['overlay-win', 'overlay-howto', 'overlay-settings']) {
+        if (!$(id).hidden) {
+            closeOverlay(id);
+            return true;
+        }
+    }
+    if (!$('overlay-privacy').hidden)
+        return true; /* swallowed, not closed */
+    if ($('screen-game').classList.contains('is-active')) {
+        leaveBoard();
+        return true;
+    }
+    if ($('screen-home').classList.contains('is-active'))
+        return false;
+    show('screen-home');
+    return true;
 }
 /* ------------------------------------------------------------------ events */
 /* What every event says about the board it happened on. One shape for all of
@@ -1005,6 +1036,26 @@ paintRandomScreen();
 Ads.start();
 applyConsent();
 askConsent();
+/* Android's hardware back button. Without a listener Capacitor leaves the
+   Activity's default in place, which finishes it — so back quit the game from
+   any screen, mid-puzzle included, with no warning and no way to say no. This
+   makes it mean what it means everywhere else: close what is open, leave the
+   board, go home, and only then close the app.
+   
+   Reached through the bridge rather than by importing @capacitor/app, for the
+   same reason ads.ts and track.ts do it: nothing here is bundled. js/ is plain
+   ES modules served off disk, and a bare specifier is not something a browser
+   or a web view can resolve — the import would throw on the phone and the
+   button would quietly go on quitting. The npm package still has to be
+   installed, because that is what puts the native half in the app. */
+(() => {
+    const cap = window.Capacitor;
+    if (!cap?.isNativePlatform?.() || !cap.registerPlugin)
+        return;
+    const App = cap.registerPlugin('App');
+    App.addListener('backButton', () => { if (!goBack())
+        void App.exitApp(); });
+})();
 /* Only ever with ?ads=preview in the URL. Draws an empty box the size of the
    banner so the layout can be looked at without a phone build. The home
    screen is the one marked active in the HTML, so it starts on. */

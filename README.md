@@ -368,6 +368,32 @@ do this and quietly produced **blank** legacy icons — a sky-blue square with
 no mark on it. Hence the order: generate everything from the square source,
 then replace the five adaptive foregrounds and backgrounds.
 
+### The Android back button
+
+Capacitor has no back handling of its own, so without a listener the
+Activity's default applies and the button **finishes the app** — from any
+screen, mid-puzzle included, with no warning and nothing to say no to.
+
+`goBack()` makes it mean what it means everywhere else, and it is the same
+function Escape and the Menu button use, so there is only one idea of where
+"back" goes:
+
+```
+overlay open      → close it
+privacy sheet     → swallowed; Save is the only way out of that one
+on a board        → its levels grid, or the calendar, or home
+anywhere else     → home
+home, nothing open → false, and only then App.exitApp()
+```
+
+Reached through `Capacitor.registerPlugin('App')` rather than by importing
+`@capacitor/app`, for the same reason `ads.ts` and `track.ts` do it: nothing
+here is bundled, `js/` is plain ES modules served off disk, and a bare
+specifier is not something a web view can resolve. The import would have
+thrown on the phone and the button would have gone on quitting. The npm
+package is still a dependency, because that is what puts the native half in
+the app.
+
 ### Ads
 
 Two formats, through `@capacitor-community/admob`: a **banner** along the
