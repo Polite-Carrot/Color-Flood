@@ -469,9 +469,9 @@ google-services plugin only if the JSON is there.
 One fires when **both** of these have happened since the last one:
 
 - at least **two minutes** of wall-clock time, **and**
-- at least **three puzzles finished**.
+- at least **two puzzles finished**.
 
-Whichever comes last, not whichever comes first. Three levels inside ninety
+Whichever comes last, not whichever comes first. Two levels inside ninety
 seconds does not fire; two minutes spent reading the level grid does not fire.
 Only both together do.
 
@@ -489,16 +489,18 @@ into a level.
 ```
 Gate.note()        one puzzle finished
 Gate.warming()     one short of the threshold — start loading, so the
-                   third win does not wait on the network
+                   win that fires it does not wait on the network
 Gate.due(now)      both conditions met
 Gate.shown(now)    an ad was shown; both counters restart
 ```
 
 The gate is deliberately separable from the plugin: it is arithmetic over two
 numbers, it is the part that was actually specified, and it is the part with a
-test. `src/ads.test.ts` checks both halves of the "and" — three fast wins do
-not fire, a long idle with no wins does not fire — and that showing one
-restarts both counters so a second cannot follow it immediately.
+test. `src/ads.test.ts` checks both halves of the "and" — fast wins do not
+fire, a long idle with no wins does not fire — and that showing one restarts
+both counters so a second cannot follow it immediately. The threshold itself
+is asserted, so changing the cadence is a deliberate edit rather than a
+drift.
 
 **The IDs committed here are Google's official test units, on purpose.** A
 real `ca-app-pub-…` unit in a public repository is an invitation to have

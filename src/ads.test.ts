@@ -15,7 +15,7 @@ describe('the ad gate', () => {
   it('is both conditions, not either', () => {
     const gate = new Gate(T0);
     wins(gate, MIN_LEVELS);
-    /* Three levels, but inside ninety seconds. */
+    /* Enough levels, but inside ninety seconds. */
     expect(gate.due(T0 + 90_000)).toBe(false);
 
     const idle = new Gate(T0);
@@ -29,7 +29,7 @@ describe('the ad gate', () => {
     expect(gate.due(T0 + MIN_MS)).toBe(true);
   });
 
-  it('needs the third win, not the second', () => {
+  it('needs the last win, not the one before it', () => {
     const gate = new Gate(T0);
     wins(gate, MIN_LEVELS - 1);
     expect(gate.due(T0 + MIN_MS)).toBe(false);
@@ -52,8 +52,8 @@ describe('the ad gate', () => {
     expect(gate.due(at)).toBe(true);
     gate.shown(at);
 
-    /* The next three wins land immediately after. The clock has restarted, so
-       they do not fire a second ad on top of the first. */
+    /* The next wins land immediately after. The clock has restarted, so they
+       do not fire a second ad on top of the first. */
     wins(gate, MIN_LEVELS);
     expect(gate.due(at + 1000)).toBe(false);
     expect(gate.due(at + MIN_MS)).toBe(true);
@@ -61,14 +61,14 @@ describe('the ad gate', () => {
 
   it('counts time from when it was made, so a fresh install gets two minutes', () => {
     const gate = new Gate(T0);
-    /* A fast player: three levels done in the first minute. */
+    /* A fast player: the threshold cleared inside the first minute. */
     wins(gate, MIN_LEVELS + 2);
     expect(gate.due(T0 + 60_000)).toBe(false);
     expect(gate.due(T0 + MIN_MS)).toBe(true);
   });
 
-  it('is the cap the sort game uses', () => {
-    expect(MIN_LEVELS).toBe(3);
+  it('is the cap that was asked for', () => {
+    expect(MIN_LEVELS).toBe(2);
     expect(MIN_MS).toBe(2 * 60 * 1000);
   });
 });

@@ -5,9 +5,9 @@
  * happened since the last one shown —
  *
  *   - at least two minutes of wall-clock time, AND
- *   - at least three puzzles finished.
+ *   - at least two puzzles finished.
  *
- * Whichever comes last, not whichever comes first. Three levels inside ninety
+ * Whichever comes last, not whichever comes first. Two levels inside ninety
  * seconds does not fire. Two minutes spent reading the level grid does not
  * fire. Only both together do, and only at a seam between puzzles — never
  * over a board being played.
@@ -25,7 +25,7 @@
    having a test for — none of which is true of the plugin plumbing. */
 
 export const MIN_MS = 2 * 60 * 1000;
-export const MIN_LEVELS = 3;
+export const MIN_LEVELS = 2;
 
 export class Gate {
   since: number;
@@ -39,7 +39,7 @@ export class Gate {
   note(): void { this.levels += 1; }
 
   /* One short of the threshold is the moment to start loading an ad, so the
-     third win does not have to wait for the network to finish. */
+     win that fires it does not have to wait for the network to finish. */
   warming(): boolean { return this.levels >= MIN_LEVELS - 1; }
 
   due(now: number): boolean {
