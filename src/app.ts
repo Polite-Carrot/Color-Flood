@@ -1090,6 +1090,12 @@ function paintPrivacy(): void {
     $(id).textContent = on ? 'On' : 'Off';
     $(id).setAttribute('aria-pressed', String(on));
   }
+  /* "Continue" the first time, because that is what the button does: it is
+     the way into the game, and the system prompts follow it. "Save" when the
+     sheet is reopened from Settings, because then it is the way back out and
+     nothing follows. */
+  $('privacy-save').textContent =
+    saved.ads === null || saved.stats === null ? 'Continue' : 'Save';
 }
 
 /* Asked once, before the first puzzle. Not asked at all where there is

@@ -482,13 +482,19 @@ a first launch is:
 
 ```
 1  Your choices          the app's own sheet, explaining both
-2  Save
+2  Continue
 3  Google's UMP form     where GDPR requires one and a message is published
 4  iOS tracking prompt   only if personalised ads were agreed to
 5  the banner, and the first interstitial warming
 ```
 
-`Ads.start()` is what puts 3 and 4 on screen, so it is held back until Save.
+The button says **Continue** the first time, because that is what it does —
+it is the way into the game and the system prompts follow it. Reopened from
+Settings it says **Save**, because then it is the way back out and nothing
+follows.
+
+`Ads.start()` is what puts 3 and 4 on screen, so it is held back until that
+first Continue.
 Called at boot it raced the sheet: both went up at once and the system prompt
 landed on top of the question that was meant to explain it. This is also the
 order Apple asks a pre-prompt to come in. A returning player has answered, so
