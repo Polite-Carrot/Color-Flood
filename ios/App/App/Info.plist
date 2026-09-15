@@ -30,11 +30,13 @@
 	<array>
 		<string>armv7</string>
 	</array>
+	<!-- Portrait only on a phone. The board is square and limited by the
+	     width, so a sideways phone spends its long axis on nothing: measured
+	     at 844x390, a 14x14 board came out 168px — 12px a cell — against 364px
+	     upright. An iPad has height to spare either way and keeps all four. -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>

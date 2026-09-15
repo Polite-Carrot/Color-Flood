@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Phones and small tablets: portrait only. The board is square and
+         limited by the width, so a sideways phone spends its long axis on
+         nothing — measured at 844x390, a 14x14 board came out 168px, 12px a
+         cell, against 364px upright.
+
+         Overridden in values-sw600dp, which is Android's own line between a
+         phone and a tablet: 600dp of smallest width. A tablet has height to
+         spare either way and keeps all four orientations, matching what
+         Info.plist does for iPhone and iPad. -->
+    <bool name="lock_portrait">true</bool>
+</resources>

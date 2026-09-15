@@ -1,8 +1,34 @@
 package com.politecarrot.colorflood;
 
+import android.content.pm.ActivityInfo;
+import android.os.Bundle;
+
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
+
+    /**
+     * Portrait on a phone, free on a tablet.
+     *
+     * The manifest cannot say that on its own — android:screenOrientation is
+     * one value for every device — so the decision comes from a resource
+     * instead. R.bool.lock_portrait is true in values/ and false in
+     * values-sw600dp/, which is Android's own line between the two: 600dp of
+     * smallest width. That gives the same split Info.plist gives iPhone and
+     * iPad.
+     *
+     * The reason for the lock is the board. It is square and limited by the
+     * width, so a sideways phone spends its long axis on nothing: measured at
+     * 844x390, a 14x14 board came out 168px — 12px a cell — against 364px the
+     * right way up.
+     */
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        if (getResources().getBoolean(R.bool.lock_portrait)) {
+            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+        }
+    }
 
     /**
      * Android's system font-size setting scales the text inside a WebView and

@@ -368,6 +368,23 @@ do this and quietly produced **blank** legacy icons — a sky-blue square with
 no mark on it. Hence the order: generate everything from the square source,
 then replace the five adaptive foregrounds and backgrounds.
 
+### Which way up
+
+Portrait on a phone, free on a tablet.
+
+The board is square and limited by the width, so a sideways phone spends its
+long axis on nothing: measured at 844×390, a 14×14 came out **168px — 12px a
+cell** — against 364px upright. A tablet has height to spare either way, and
+its landscape layouts are fine: 448px and 32px a cell on a 1024×768 iPad, no
+screen overflowing, calendar included.
+
+Two different mechanisms, because neither platform says it the same way:
+
+| | How |
+|---|---|
+| iOS | `UISupportedInterfaceOrientations` is portrait; `~ipad` keeps all four |
+| Android | `android:screenOrientation` is one value for every device, so the split comes from a resource: `R.bool.lock_portrait`, true in `values/` and false in `values-sw600dp/` — Android's own line between a phone and a tablet — read in `MainActivity.onCreate` |
+
 ### The Android back button
 
 Capacitor has no back handling of its own, so without a listener the
