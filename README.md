@@ -570,6 +570,20 @@ gate be tested in Node.
 
 Nothing scrolls that should not, and nothing is ever cut off.
 
+The home screen fills the page rather than stacking at the top of it. Sized to
+their contents, the four menu cards left **188px of nothing** under the buttons
+on a 393×852 phone and 264px on a 430×932 one, with the whole menu bunched
+into the top two thirds. The rows now take a share of the height — 11.3vh
+each, capped at 66px and 110px so that a share of a landscape phone is still
+tappable and a share of a tablet is not a billboard — and the block is centred
+in whatever is left.
+
+The numbers came off a screenshot of the sort game's own home screen, measured
+border to border: **96px cards on a 112px pitch**, which is what Color Flood
+now renders at the same size. Letting the leftover fall into the gaps instead
+(`space-evenly`) gave 52px between cards, more than three times the sort
+game's, and read as four separate things rather than one menu.
+
 One thing was, for a while: the board's left and right sides had no outline
 on a phone, while its top and bottom did. `overflow-y: auto` on the screen —
 there so that a window shorter than any measured phone scrolls rather than

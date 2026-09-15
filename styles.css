@@ -269,9 +269,32 @@ input:focus-visible {
   text-wrap: balance;
 }
 
+/* The menu fills the screen rather than stacking at the top of it.
+   
+   Content-sized cards left 188px of nothing under the buttons on a 393x852
+   phone and 264px on a 430x932 one — the whole menu bunched into the top two
+   thirds with the game's name floating above it. The four rows now take a
+   share of the height instead: 11.5vh each, which comes out at 98px on a
+   852-tall phone, the same as the sort game's.
+   
+   Capped at both ends, because a row that is a share of the height is a row
+   that can become silly. 66px is a comfortable tap target with the sub-line
+   still on it; 112px stops a tablet turning four buttons into four billboards.
+   
+   The gap is 1.9vh and the rows 11.3vh — 16px and 96px on that phone — and
+   the block is centred in whatever room is left rather than stretched across
+   it. Both numbers were measured off a screenshot of the sort game's own home
+   screen, border to border: 96px cards on a 112px pitch. Letting the leftover
+   fall into the gaps instead (space-evenly) put 52px between the cards, more
+   than three times the sort game's, and it read as four separate things
+   rather than one menu. */
 .choices {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  gap: clamp(7px, 1.5vh, 16px);
+  grid-template-rows: repeat(4, clamp(66px, 11.3vh, 110px));
+  align-content: center;
+  gap: clamp(9px, 1.9vh, 20px);
   width: 100%;
   max-width: 520px;
   margin: 0 auto;
@@ -1193,6 +1216,11 @@ input:focus-visible {
   .cal__names, .cal { max-width: min(100%, 54vh); margin-inline: auto; }
 }
 @media (max-height: 460px) {
+  /* A phone on its side has no height to share out, so the rows go back to
+     being the size of what is in them and the menu scrolls if it must. A
+     share of 390px is not a share worth having. */
+  .choices { display: grid; grid-template-rows: none; grid-auto-rows: min-content;
+             align-content: start; flex: 0 1 auto; }
   .masthead__tag { display: none; }
   .cal__legend { display: none; }
   .difficulty__blurb { min-height: 0; }
