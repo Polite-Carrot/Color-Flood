@@ -795,7 +795,7 @@ function wire() {
         else
             show('screen-home');
     });
-    for (const id of ['privacy-ads', 'privacy-stats']) {
+    for (const id of ['privacy-stats']) {
         $(id).addEventListener('click', () => {
             /* The button carries the answer until Save is pressed, not the save —
                nothing is decided by tapping a switch and then backing out. */
@@ -806,8 +806,7 @@ function wire() {
         });
     }
     $('privacy-save').addEventListener('click', () => {
-        const first = saved.ads === null || saved.stats === null;
-        saved.ads = $('privacy-ads').getAttribute('aria-pressed') === 'true';
+        const first = saved.stats === null;
         saved.stats = $('privacy-stats').getAttribute('aria-pressed') === 'true';
         save();
         applyConsent();
@@ -999,9 +998,17 @@ function where() {
     };
 }
 /* ------------------------------------------------------------------ consent */
-/* Both answers in one place, applied to both things that read them. Called on
-   boot and on every change, so there is no path where a switch is flipped and
-   only one of the two ends up knowing. */
+/* The two answers in one place, applied to everything that reads them. Called
+   on boot, when the sheet is saved, and when the tracking prompt comes back,
+   so there is no path where one of them is decided and something else is
+   still working off the old answer.
+   
+   They come from different places on purpose. Usage data is the app's own
+   question, asked in the sheet. Personalised ads is APPLE'S question — the
+   tracking prompt is exactly that question, and asking it twice, once in our
+   own words and once in the system's, is two chances to disagree with
+   ourselves. So saved.ads is not something the sheet writes; it is what the
+   prompt answered. Null until it has. */
 function applyConsent() {
     const ads = saved.ads !== false;
     Ads.setPersonalised(ads);
@@ -1010,18 +1017,28 @@ function applyConsent() {
     else
         void Track.stop();
 }
+/* What the tracking prompt came back with. On Android the plugin always says
+   authorized, which is right: there is no ATT there, and what governs
+   personalisation is the consent form instead. */
+Ads.settle = (authorised) => {
+    if (saved.ads === authorised)
+        return;
+    saved.ads = authorised;
+    save();
+    applyConsent();
+};
 function paintPrivacy() {
-    for (const [id, on] of [['privacy-ads', saved.ads !== false],
-        ['privacy-stats', saved.stats !== false]]) {
-        $(id).textContent = on ? 'On' : 'Off';
-        $(id).setAttribute('aria-pressed', String(on));
-    }
+    /* OFF unless somebody has actually switched it on. `!== false` would have
+       made an unanswered sheet read as a yes, which is the one thing a consent
+       default must not do. */
+    const on = saved.stats === true;
+    $('privacy-stats').textContent = on ? 'On' : 'Off';
+    $('privacy-stats').setAttribute('aria-pressed', String(on));
     /* "Continue" the first time, because that is what the button does: it is
        the way into the game, and the system prompts follow it. "Save" when the
        sheet is reopened from Settings, because then it is the way back out and
        nothing follows. */
-    $('privacy-save').textContent =
-        saved.ads === null || saved.stats === null ? 'Continue' : 'Save';
+    $('privacy-save').textContent = saved.stats === null ? 'Continue' : 'Save';
 }
 /* Asked once, before the first puzzle. Not asked at all where there is
    nothing to ask about: the web build with no measurement id set has no
@@ -1030,7 +1047,7 @@ function paintPrivacy() {
 /* Returns whether the answers are already in — which is to say, whether the
    caller may get on with the things that need them. */
 function askConsent() {
-    if (saved.ads !== null && saved.stats !== null)
+    if (saved.stats !== null)
         return true;
     /* Nothing to consent to: the web build with no measurement id has no
        analytics and no ads either, and a consent sheet for neither is a door in

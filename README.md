@@ -472,19 +472,32 @@ https://polite-carrot.github.io/Color-Flood/?ads=preview
 ### Analytics
 
 Off until somebody says yes, and it is a real question rather than a banner
-that assumes one. The first launch with anything to consent to shows **Your
-choices** — personalised ads, and usage data — and Settings reopens it. Escape
-does not dismiss it: closing it with neither answer recorded would mean asking
-again on the next launch, which teaches people to dismiss it faster.
+that assumes one. The first launch shows **Your choices**, and Settings
+reopens it. Escape does not dismiss it: closing it unanswered would mean
+asking again on the next launch, which teaches people to dismiss it faster.
+
+**One question, and it is off by default.** `saved.stats` starts null and the
+switch reads `=== true`, not `!== false` — the second would have made an
+unanswered sheet read as a yes, which is the one thing a consent default must
+not do.
+
+**Personalised ads is not on that sheet, on purpose.** Apple's tracking prompt
+*is* that question. Asking it twice, once in our words and once in the
+system's, is two chances to disagree with ourselves — so `saved.ads` is not
+something the sheet writes, it is what the prompt answered, and it stays null
+until it has. `authorized` is the only yes; denied, restricted and a prompt
+that somehow returns undetermined are all no, and a no puts `npa` on every ad
+request. On Android the plugin answers `authorized` unconditionally, which is
+right there: what governs personalisation on Android is the consent form.
 
 **It comes first, and nothing else starts until it is answered.** The order on
 a first launch is:
 
 ```
-1  Your choices          the app's own sheet, explaining both
+1  Your choices          send usage data? — off by default
 2  Continue
 3  Google's UMP form     where GDPR requires one and a message is published
-4  iOS tracking prompt   only if personalised ads were agreed to
+4  iOS tracking prompt   allow tracking for personalised ads?
 5  the banner, and the first interstitial warming
 ```
 
@@ -500,11 +513,8 @@ landed on top of the question that was meant to explain it. This is also the
 order Apple asks a pre-prompt to come in. A returning player has answered, so
 for them the stack starts at boot as it always did.
 
-Step 4 is skipped outright when personalised ads were declined. ATT is
-permission to use the advertising identifier, and somebody who has already
-said no is not going to have it used — `npa` goes on every request and the
-three ad grants are denied — so asking would be a system prompt whose answer
-the app already has.
+Step 4 runs before `initialize`, because its answer is what decides whether
+the first ad request is personalised.
 
 The answers live in the save as `ads` and `stats`, and **null is a third
 state**: "off because they said no" and "off because nobody has asked" want

@@ -148,10 +148,14 @@ export const Ads = {
   starting: null as Promise<boolean> | null,
   unit: '',
   bannerUnit: '',
-  /* Personalised by default; a privacy switch would flip this. When off, npa
-     goes on every request so Google serves non-personalised ads even where
-     UMP recorded a consent. */
+  /* What the tracking prompt said. Personalised until told otherwise, and
+     when it is told otherwise npa goes on every request so Google serves
+     non-personalised ads even where UMP recorded a consent. */
   personalised: true,
+  /* Called with the prompt's answer, so the rest of the app can record it and
+     bring its own consent grants into line. Replaced in app.ts; a no-op here
+     so ads.ts stays something that can be dropped into anything. */
+  settle: ((_authorised: boolean): void => {}) as (authorised: boolean) => void,
   /* An interstitial is loaded and waiting. Cleared by every show — each one
      has to be prepared again. */
   loaded: false,
@@ -195,12 +199,10 @@ export const Ads = {
        personalised or not from that alone. */
     this.starting = (async () => {
       await this.consent(admob);
-      /* Only where it would mean something. ATT is the permission to use the
-         advertising identifier, and somebody who has already said no to
-         personalised ads is not going to have it used — npa goes on every
-         request and the three ad grants are denied. Asking anyway would be a
-         system prompt whose answer this app has already been given. */
-      if (this.personalised) await this.tracking(admob);
+      /* Always, and before initialize: the answer it comes back with is what
+         decides whether ads are personalised, so it has to be in before the
+         first ad is requested. */
+      await this.tracking(admob);
       await admob.initialize({ initializeForTesting: isTestUnit(this.unit) });
       this.ready = true;
       return true;
@@ -217,13 +219,24 @@ export const Ads = {
     } catch { /* no form published, or the lookup failed — carry on */ }
   },
 
-  /* iOS 14.5+ wants an explicit prompt before the IDFA is readable. Android
-     no-ops both calls. */
+  /* iOS 14.5+ wants an explicit prompt before the IDFA is readable, and that
+     prompt IS the personalised-ads question — which is why the answer is read
+     back rather than thrown away. Android has no ATT and its half of the
+     plugin answers `authorized` unconditionally, which is the right answer
+     there: what governs personalisation on Android is the consent form. */
   async tracking(admob: Plugin): Promise<void> {
     try {
-      const t = await admob.trackingAuthorizationStatus();
-      if (t && t.status === 'notDetermined') await admob.requestTrackingAuthorization();
-    } catch { /* not iOS, or an older SDK */ }
+      let t = await admob.trackingAuthorizationStatus();
+      if (t && t.status === 'notDetermined') {
+        await admob.requestTrackingAuthorization();
+        t = await admob.trackingAuthorizationStatus();
+      }
+      /* `authorized` is the only yes. Denied, restricted, and a prompt that
+         somehow came back still undetermined are all no. */
+      const yes = t?.status === 'authorized';
+      this.personalised = yes;
+      this.settle(yes);
+    } catch { /* not iOS, or an older SDK: leave it as it was */ }
   },
 
   async load(): Promise<boolean> {
