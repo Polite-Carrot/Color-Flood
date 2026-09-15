@@ -698,18 +698,50 @@ function paintRandomScreen(): void {
   }
 }
 
-function showLevels(mode: Mode): void {
+/* A hundred tiles a page.
+   
+   All thousand at once took 806ms to build and made a 12,458px scroll — a
+   pause on the way in, and then a lot of flicking to reach level 640. A
+   hundred is two screens of grid, which is a scroll rather than a journey,
+   and it paints in a tenth of the time. */
+const CHAPTER = 100;
+const chapters = Math.ceil(CAMPAIGN_LENGTH / CHAPTER);
+
+/* Which page each campaign is showing. Kept per mode so backing out of a
+   Merge level and into Flood does not land on Merge's page, and reset to
+   wherever the player has got to whenever the screen is opened fresh. */
+const chapterOf: Record<Mode, number> = { flood: 0, merge: 0 };
+
+function showLevels(mode: Mode, page?: number): void {
   const run = saved.progress[mode];
   const done = run.best.filter((m) => m > 0).length;
   const atPar = run.best.filter((m, i) => m > 0 && m === run.par[i]).length;
 
+  /* Opened without a page: the one holding the furthest level reached, so a
+     player at 340 does not start at 1 every time. */
+  if (page === undefined) {
+    const reached = run.best.reduce((last, m, i) => (m > 0 ? i + 1 : last), 0);
+    chapterOf[mode] = Math.min(chapters - 1, Math.floor(reached / CHAPTER));
+  } else {
+    chapterOf[mode] = Math.min(chapters - 1, Math.max(0, page));
+  }
+  const at = chapterOf[mode];
+  const from = at * CHAPTER + 1;
+  const to = Math.min(CAMPAIGN_LENGTH, from + CHAPTER - 1);
+
   $('levels-heading').textContent = modeLabel(mode);
   $('levels-note').textContent =
     done + ' of ' + CAMPAIGN_LENGTH + ' done' + (atPar ? ' · ' + atPar + ' at par' : '');
+  $('chapter-name').textContent = from + ' – ' + to;
+  ($('chapter-prev') as HTMLButtonElement).disabled = at === 0;
+  ($('chapter-next') as HTMLButtonElement).disabled = at === chapters - 1;
+  $('chapter-prev').onclick = () => showLevels(mode, at - 1);
+  $('chapter-next').onclick = () => showLevels(mode, at + 1);
 
   const grid = $('level-grid');
   grid.replaceChildren();
-  for (let n = 1; n <= CAMPAIGN_LENGTH; n++) {
+  grid.scrollTop = 0;
+  for (let n = from; n <= to; n++) {
     const item = document.createElement('li');
     const tile = document.createElement('button');
     tile.type = 'button';

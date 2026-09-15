@@ -13,7 +13,7 @@
 import { generate, solve } from "./generator.js";
 import { PALETTE } from "./palette.js";
 import { optionsFor } from "./levels.js";
-export const CAMPAIGN_LENGTH = 100;
+export const CAMPAIGN_LENGTH = 1000;
 /* How many of those are drawn by hand. */
 export const TAUGHT = 5;
 /* ------------------------------------------------------- the drawn levels */
@@ -242,22 +242,58 @@ function fromDrawn(mode, n, spec) {
  * Merge tops out smaller than Flood, and for the same reason it does on the
  * Random screen: par has to be searched for and two fronts make that dear.
  * Eleven across is where a board still deals in under a second. */
+/* Where the ramp finishes — NOT where the campaign does.
+   
+   Spreading the climb across all thousand was the obvious thing and the wrong
+   one: t would move by a thousandth a level, so 400 and 420 would deal the
+   same size board with the same palette at the same depth, and the campaign
+   would be ten times longer with less variety than the hundred had. Reaching
+   full size by 200 and then staying there gives the back four fifths a top
+   difficulty to live at. */
+export const RAMP_END = 200;
+/* How the settings move once they have arrived. Eight hundred levels of
+   exactly 16x16, six colours, depth ten is not a campaign either — the seeds
+   differ so the boards differ, but every one would be the same shape. So the
+   board breathes on a long cycle instead: a triangle wave over CYCLE levels
+   that takes the size down a few and brings it back, and the palette with it
+   on the wider half. Deterministic, like everything else here — level 640 is
+   the same board today and in a year. */
+const CYCLE = 60;
+/* 0 at the trough, 1 at the crest, over CYCLE levels. */
+function wave(n) {
+    const x = ((n % CYCLE) + CYCLE) % CYCLE;
+    return 1 - Math.abs(x - CYCLE / 2) / (CYCLE / 2);
+}
 export function campaignSetting(mode, n) {
     const merge = mode === 'merge';
-    /* 0 at the first seeded level, 1 at the last. */
-    const t = Math.min(1, Math.max(0, (n - TAUGHT - 1) / (CAMPAIGN_LENGTH - TAUGHT - 1)));
+    /* 0 at the first seeded level, 1 once the ramp has topped out. */
+    const t = Math.min(1, Math.max(0, (n - TAUGHT - 1) / (RAMP_END - TAUGHT - 1)));
     const ease = (from, to) => Math.round(from + (to - from) * t);
-    const width = merge ? ease(7, 11) : ease(6, 16);
+    const top = t >= 1;
+    /* Below the top, the ramp. Above it, the cycle: the board comes down by up
+       to four (two in Merge, where 11x11 is already the ceiling the par search
+       can afford) and climbs back. */
+    const swing = merge ? 2 : 4;
+    const dip = top ? Math.round(swing * (1 - wave(n))) : 0;
+    const width = (merge ? ease(7, 11) : ease(6, 16)) - dip;
     const height = width;
-    const palette = merge ? ease(4, 6) : ease(4, 6);
-    const depth = merge ? ease(3, 7) : ease(3, 10);
+    /* The palette drops a colour only at the bottom of the swing, so the small
+       boards are not also the busiest ones. */
+    const palette = (merge ? ease(4, 6) : ease(4, 6)) - (top && dip >= swing - 1 ? 1 : 0);
+    const depth = (merge ? ease(3, 7) : ease(3, 10)) - (top ? Math.round(dip / 2) : 0);
     const patchSize = merge ? ease(6, 10) : ease(6, 12);
-    /* Three spare moves at the start, none by the end. It saws rather than
+    /* Three spare moves at the start, none by the top. It saws rather than
        sliding: within each stretch of ten the slack drops, then comes back a
        little as the board steps up, so the campaign breathes instead of getting
-       relentlessly harder for a hundred levels. */
+       relentlessly harder.
+       
+       Past the top it keeps breathing, because eight hundred boards at exact
+       par is an endurance test rather than a campaign: the first four of every
+       ten carry a spare move, the other six do not. */
     const base = t < 0.2 ? 3 : t < 0.45 ? 2 : t < 0.75 ? 1 : 0;
-    const slack = Math.max(0, base - (n % 10 >= 7 ? 1 : 0));
+    const slack = top
+        ? (n % 10 < 4 ? 1 : 0)
+        : Math.max(0, base - (n % 10 >= 7 ? 1 : 0));
     return {
         mode,
         key: 'campaign-' + n,

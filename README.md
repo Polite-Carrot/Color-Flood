@@ -295,6 +295,35 @@ so a hole means offering a color that appears nowhere on the board, on the
 levels whose entire job is teaching what a move does. `campaign.ts` throws if
 a board leaves one, and a test checks all ten.
 
+### A thousand levels, and where the ramp stops
+
+`CAMPAIGN_LENGTH` is 1000 per mode. Nothing is authored and nothing is
+stored: level 640 is the string `flood/campaign/640` handed to the generator,
+and it does not exist until somebody taps it.
+
+**The ramp tops out at `RAMP_END = 200`, not at 1000.** Spreading the climb
+across the whole campaign was the obvious thing and the wrong one — `t` would
+move by a thousandth a level, so 400 and 420 would deal the same size board
+with the same palette at the same depth, and the campaign would be ten times
+longer with less variety than the hundred had.
+
+**Past the ramp the settings cycle** rather than sitting still, because eight
+hundred levels of exactly 16×16, six colours, depth ten is not a campaign
+either. A triangle wave over 60 levels takes the board down by up to four
+(two in Merge, where 11×11 is already the ceiling the par search can afford)
+and brings it back, with the palette dropping a colour only at the bottom of
+the swing so the small boards are not also the busiest. Deterministic, like
+everything else: level 640 is the same board today and in a year.
+
+The slack keeps breathing up there too — the first four of every ten carry a
+spare move, the other six do not. Eight hundred boards at exact par is an
+endurance test rather than a campaign.
+
+Dealing costs, sampled across the whole thousand: **Flood 10.7ms mean, 32ms
+worst; Merge 49.8ms mean, 358ms worst**. Merge is the expensive one because
+its par search carries two fronts, and the `dealing()` spinner is there for
+its bad days.
+
 ### The ramp
 
 Everything after level five interpolates: the board widens, the palette fills,
@@ -749,6 +778,11 @@ from, and `git push` is the deploy.
 | `src/ads.ts` | When an interstitial is allowed to appear, and the AdMob call that shows it. A no-op off a phone. |
 | `src/track.ts` | Consented analytics: GA4 on the web, Firebase on a phone. Inert until somebody says yes. |
 | `src/cli.ts` | Deals a board and prints it to a terminal. |
+
+The levels grid pages by the hundred. All thousand tiles at once took 806ms
+to build and made a 12,458px scroll — a pause on the way in, then a lot of
+flicking to reach 640. A hundred paints in a fraction of that over 1,245px,
+and the screen opens on whichever page holds the furthest level reached.
 
 `generator.ts`, `play.ts`, `levels.ts`, `campaign.ts` and `palette.ts` are all
 pure — no DOM, no storage, no clock — which is the point: a React Native build

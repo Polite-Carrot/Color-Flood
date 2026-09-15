@@ -5,7 +5,7 @@
  * exact moment somebody is deciding whether to keep playing. */
 
 import { describe, it, expect } from 'vitest';
-import { CAMPAIGN_LENGTH, TAUGHT, campaignLevel, campaignSeed, campaignSetting } from './campaign.ts';
+import { CAMPAIGN_LENGTH, RAMP_END, TAUGHT, campaignLevel, campaignSeed, campaignSetting } from './campaign.ts';
 import { greedy, solve } from './generator.ts';
 import { play, start, won } from './play.ts';
 import { MODES } from './levels.ts';
@@ -105,13 +105,24 @@ describe('the taught levels', () => {
 });
 
 describe('the campaigns', () => {
-  it('deal every level, in both of them', () => {
-    /* The whole of both campaigns, dealt. It is the only check that matters
-       for the seeded half: a level that cannot be generated is a wall a
-       player hits with no way past and no message worth reading. About six
-       seconds, which is worth paying on every push. */
+  it('deal every level of the first two hundred, and a stride through the rest', () => {
+    /* A level that cannot be generated is a wall a player hits with no way
+       past and no message worth reading, so this is the check that matters
+       for the seeded half.
+       
+       It used to deal all of both campaigns. At a hundred levels each that
+       was six seconds, worth paying on every push; at a thousand it is the
+       better part of a minute, most of it Merge, whose par search carries two
+       fronts. So: every level up to where the ramp tops out — that is where
+       the settings are all different from each other and where a mistake in
+       the ramp would show — and then a stride of 7 through the rest.
+       
+       7 because the shapes above RAMP_END repeat on 60 and the slack on 10,
+       and 7 is coprime with both: the stride walks every phase of both cycles
+       rather than sampling the same corner of them a hundred times. */
     for (const mode of MODES) {
       for (let n = 1; n <= CAMPAIGN_LENGTH; n++) {
+        if (n > RAMP_END && n % 7 !== 0) continue;
         const where = mode + ' level ' + n;
         let entry;
         expect(() => { entry = campaignLevel(mode, n); }, where).not.toThrow();
@@ -124,7 +135,7 @@ describe('the campaigns', () => {
 
   it('deal the same board for a level every time', () => {
     for (const mode of MODES) {
-      for (const n of [7, 23, 61, 100]) {
+      for (const n of [7, 23, 61, 100, 419, 640, CAMPAIGN_LENGTH]) {
         expect(campaignLevel(mode, n).level, mode + ' level ' + n)
           .toEqual(campaignLevel(mode, n).level);
       }
@@ -142,7 +153,10 @@ describe('the campaigns', () => {
   it('ramps upwards and runs out of slack', () => {
     for (const mode of MODES) {
       const first = campaignSetting(mode, TAUGHT + 1);
-      const last = campaignSetting(mode, CAMPAIGN_LENGTH);
+      /* The top of the ramp, not the end of the campaign: past RAMP_END the
+         settings cycle, so the last level is wherever the wave happens to
+         have got to rather than the hardest board in the game. */
+      const last = campaignSetting(mode, RAMP_END - 1);
       expect(last.width, mode).toBeGreaterThan(first.width);
       expect(last.palette, mode).toBeGreaterThanOrEqual(first.palette);
       expect(last.depth, mode).toBeGreaterThan(first.depth);

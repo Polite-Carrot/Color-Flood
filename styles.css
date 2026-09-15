@@ -686,6 +686,29 @@ input:focus-visible {
 }
 .cal__head .btn { padding: 5px 13px; font-size: 21px; line-height: 1; }
 
+/* The levels grid pages by the hundred, and this is how you turn the page.
+   Built like the calendar's month header because it is the same gesture, and
+   two different-looking pagers for the same job is one too many. */
+.chapters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto clamp(8px, 1.6vh, 14px);
+}
+.chapters h3 {
+  margin: 0;
+  flex: 1;
+  text-align: center;
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: clamp(16px, 2.3vh, 20px);
+  font-variant-numeric: tabular-nums;
+}
+.chapters .btn { padding: 5px 13px; font-size: 21px; line-height: 1; }
+
 .cal__names, .cal {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
