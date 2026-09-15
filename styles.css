@@ -54,6 +54,19 @@ html, body {
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: manipulation;
+  /* Every size in this game is in px, vh or em off a px root, and the board
+     is measured in JavaScript against the room it actually has. A browser
+     that inflates the TEXT without telling the layout — which is what iOS
+     does when it decides a column is too narrow to read — breaks that
+     arithmetic: the swatch letters grow, the buttons grow, the board does
+     not, and they end up on top of each other.
+     
+     100% rather than none, so pinch-zoom and the browser's own page zoom
+     still scale everything together. What is refused is text being scaled on
+     its own. The matching switch on Android is in MainActivity.java, because
+     that one is a WebView setting rather than a CSS property. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
@@ -237,7 +250,7 @@ input:focus-visible {
   margin: 0;
   font-family: "Baloo 2", sans-serif;
   font-weight: 800;
-  font-size: clamp(30px, min(9vw, 7.4vh), 74px);
+  font-size: clamp(42px, min(9vw, 7.4vh), 74px);
   line-height: .98;
   letter-spacing: -.01em;
   color: #fff;
@@ -251,13 +264,15 @@ input:focus-visible {
      the font. The shadow stopped reading as a shadow and started filling the
      counters of the o's, so the word looked double-decked.
      
-     In em they cannot drift, because there is only one ruler. .11 and .085
-     were picked by rendering the title against .095/.095 (the sort game's
-     proportions at full size) and a few neighbours: this keeps that game's
-     chunk while leaving the bowls of the letters open. */
-  -webkit-text-stroke: .11em var(--ink);
+     In em they cannot drift, because there is only one ruler. .167 for both
+     is the sort game's, worked back from its rendered title: 7px of stroke
+     and 7px of drop on 42px type. It had looked thinner here only because
+     this title was rendering at 35px — the sort game's smaller ladder sits
+     behind a max-height: 720px query that a 852-tall phone never reaches, so
+     its home screen is at the full 42px, and the floor below matches it. */
+  -webkit-text-stroke: .167em var(--ink);
   paint-order: stroke fill;
-  text-shadow: 0 .085em 0 var(--ink);
+  text-shadow: 0 .167em 0 var(--ink);
   text-wrap: balance;
 }
 .masthead__tag {
@@ -1187,6 +1202,10 @@ input:focus-visible {
    keeps its two reserved lines at a smaller size rather than losing them —
    a status that can change height would resize the board mid-game. */
 @media (max-height: 700px) {
+  /* The title comes down with the rest of it. A 42px floor is right on a
+     phone held upright and far too much on a short window, which is exactly
+     the ladder the sort game climbs at 720 and 600. */
+  .masthead h1 { font-size: clamp(36px, min(9vw, 7.4vh), 56px); }
   .topbar { margin-bottom: 8px; }
   .subline { margin-bottom: 6px; }
   .board-wrap { margin-bottom: 8px; }
@@ -1201,6 +1220,7 @@ input:focus-visible {
    what cannot be scaled: pieces that are decoration rather than information,
    which go entirely rather than shrinking to illegible. */
 @media (max-height: 560px) {
+  .masthead h1 { font-size: clamp(26px, min(8vw, 7vh), 40px); }
   .masthead__mark { display: none; }
   .status { min-height: 1.4em; margin-top: 8px; }
   .toolbar { margin-top: 10px; }

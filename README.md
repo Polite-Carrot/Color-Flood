@@ -570,6 +570,28 @@ gate be tested in Node.
 
 Nothing scrolls that should not, and nothing is ever cut off.
 
+### Text the device cannot inflate
+
+Every size here is px, vh, or em off a px root, and the board is measured in
+JavaScript against the room it actually has. A platform that scales the TEXT
+without telling the layout breaks that arithmetic — the swatch letters and the
+button labels grow, the boxes holding them do not, and they end up on top of
+each other. Two switches, because there is no one place to say it:
+
+| Where | Switch |
+|-------|--------|
+| Web, iOS | `text-size-adjust: 100%` on `html, body` in `styles.css` |
+| Android | `setTextZoom(100)` in `MainActivity.java` — a WebView setting with no CSS equivalent |
+
+`100%` rather than `none`, so pinch-zoom and the browser's own page zoom still
+scale everything together. What is refused is text being scaled on its own.
+
+Forced past both — Chromium with `minimumFontSize=24`, a floor CSS cannot
+override — the design bends rather than breaks: the labels grow, the board
+gives up 28px to make room for them (364 → 336 on a 393px phone), and no
+screen overflows. The in-game heading truncates to its ellipsis, which is what
+that ellipsis is for.
+
 The home screen fills the page rather than stacking at the top of it. Sized to
 their contents, the four menu cards left **188px of nothing** under the buttons
 on a 393×852 phone and 264px on a 430×932 one, with the whole menu bunched
