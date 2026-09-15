@@ -339,6 +339,35 @@ press.
 repository — pointing it there would ship the TypeScript, the tests and every
 dependency inside the app.
 
+### Icons
+
+`assets/app-icon.svg` is the mark — the flood rising into a corner. The native
+icons are generated from it rather than drawn again:
+
+```
+npx @capacitor/assets generate --iconBackgroundColor '#a5e2fa' \
+    --splashBackgroundColor '#a5e2fa'
+```
+
+with `assets/icon.png` (1024, square and opaque — iOS applies its own mask and
+rejects transparency, so the SVG's rounded corner is dropped for this one) and
+`assets/splash.png` (2732) as the sources.
+
+**Android's adaptive layers are then overwritten**, and that is not optional.
+A launcher masks the icon to a circle, a squircle or a rounded square as it
+likes, and shows only the middle 72 of the 108-unit frame, of which a 66-unit
+circle is all that is guaranteed. An icon generated full-bleed — which is what
+one square source gets you — had the corners cut off its own outline under a
+round mask, and a broken outline reads as a broken icon. So the mark is drawn
+at 46.7/67 scale: the largest square whose diagonal fits that 66-unit circle.
+
+The legacy `ic_launcher.png` still comes from the full-bleed source, because
+pre-adaptive Android draws it unmasked. Handing the tool `icon-foreground.png`
+and `icon-background.png` instead of a plain icon looked like the tidy way to
+do this and quietly produced **blank** legacy icons — a sky-blue square with
+no mark on it. Hence the order: generate everything from the square source,
+then replace the five adaptive foregrounds and backgrounds.
+
 ### Ads
 
 Two formats, through `@capacitor-community/admob`: a **banner** along the
@@ -589,7 +618,7 @@ from, and `git push` is the deploy.
 
 | Path | What it is |
 |------|------------|
-| `index.html`, `styles.css`, `fonts.css`, `assets/` | The page. Hand-written, and served as they are. |
+| `index.html`, `styles.css`, `fonts.css`, `assets/` | The page. Hand-written, and served as they are. `assets/icon.png` and `assets/splash.png` are the sources every native icon is generated from. |
 | `js/` | **Generated** from `src/` by `npm run build`. Committed, and never edited by hand. |
 | `src/generator.ts` | The generator and the solver. No imports, no DOM, no `Math.random`. |
 | `src/play.ts` | The rules: what the blob is, what a move does, undo. |

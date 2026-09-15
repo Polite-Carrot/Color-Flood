@@ -1,6 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8" ?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -8,7 +7,6 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
             android:name=".MainActivity"
@@ -16,12 +14,10 @@
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
             android:exported="true">
-
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-
         </activity>
 
         <provider
@@ -29,9 +25,7 @@
             android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths"></meta-data>
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
 
         <!-- AdMob application ID. Google's official TEST app ID, and that is
@@ -41,7 +35,8 @@
              console at release, alongside the ad units in src/ads.ts. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713"/>
+            android:value="ca-app-pub-3940256099942544~3347511713"
+        />
 
         <!-- Firebase Analytics starts collecting the moment the SDK loads,
              which is before anybody has been asked anything. These flags
@@ -50,21 +45,11 @@
              below are the second half of the same thing: the deactivation
              flag stops the process starting, the grants are what Analytics
              reads on every event once it has. -->
-        <meta-data
-            android:name="firebase_analytics_collection_deactivated"
-            android:value="true"/>
-        <meta-data
-            android:name="google_analytics_default_allow_analytics_storage"
-            android:value="false"/>
-        <meta-data
-            android:name="google_analytics_default_allow_ad_storage"
-            android:value="false"/>
-        <meta-data
-            android:name="google_analytics_default_allow_ad_user_data"
-            android:value="false"/>
-        <meta-data
-            android:name="google_analytics_default_allow_ad_personalization_signals"
-            android:value="false"/>
+        <meta-data android:name="firebase_analytics_collection_deactivated" android:value="true" />
+        <meta-data android:name="google_analytics_default_allow_analytics_storage" android:value="false" />
+        <meta-data android:name="google_analytics_default_allow_ad_storage" android:value="false" />
+        <meta-data android:name="google_analytics_default_allow_ad_user_data" android:value="false" />
+        <meta-data android:name="google_analytics_default_allow_ad_personalization_signals" android:value="false" />
     </application>
 
     <!-- Permissions -->
