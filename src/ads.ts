@@ -195,7 +195,12 @@ export const Ads = {
        personalised or not from that alone. */
     this.starting = (async () => {
       await this.consent(admob);
-      await this.tracking(admob);
+      /* Only where it would mean something. ATT is the permission to use the
+         advertising identifier, and somebody who has already said no to
+         personalised ads is not going to have it used — npa goes on every
+         request and the three ad grants are denied. Asking anyway would be a
+         system prompt whose answer this app has already been given. */
+      if (this.personalised) await this.tracking(admob);
       await admob.initialize({ initializeForTesting: isTestUnit(this.unit) });
       this.ready = true;
       return true;

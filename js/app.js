@@ -806,11 +806,19 @@ function wire() {
         });
     }
     $('privacy-save').addEventListener('click', () => {
+        const first = saved.ads === null || saved.stats === null;
         saved.ads = $('privacy-ads').getAttribute('aria-pressed') === 'true';
         saved.stats = $('privacy-stats').getAttribute('aria-pressed') === 'true';
         save();
         applyConsent();
         closeOverlay('overlay-privacy');
+        /* The first Save is what releases the ad stack: the card closes, and then
+           Google's consent form and iOS's tracking prompt come up against the
+           answers just given rather than in front of the question. Reopening the
+           sheet later from Settings changes the answers, and applyConsent above
+           has already carried them — there is nothing left to start. */
+        if (first)
+            Ads.start();
     });
     $('set-privacy').addEventListener('click', () => {
         closeOverlay('overlay-settings');
@@ -1013,13 +1021,19 @@ function paintPrivacy() {
    nothing to ask about: the web build with no measurement id set has no
    analytics to consent to and no ads either, and a consent sheet for neither
    is just a door in front of the game. */
+/* Returns whether the answers are already in — which is to say, whether the
+   caller may get on with the things that need them. */
 function askConsent() {
     if (saved.ads !== null && saved.stats !== null)
-        return;
+        return true;
+    /* Nothing to consent to: the web build with no measurement id has no
+       analytics and no ads either, and a consent sheet for neither is a door in
+       front of the game. */
     if (!Track.configured() && !Ads.native())
-        return;
+        return true;
     paintPrivacy();
     openOverlay('overlay-privacy');
+    return false;
 }
 function paintSettings() {
     for (const [id, on] of [['set-sound', saved.sound], ['set-marks', saved.marks]]) {
@@ -1033,9 +1047,20 @@ paintRandomScreen();
 /* Native only, and deliberately at boot: the GDPR form and iOS's tracking
    prompt land while the player is still looking at the home screen, and the
    first interstitial is warm long before anything is allowed to show it. */
-Ads.start();
 applyConsent();
-askConsent();
+/* Order matters, and it is the whole point of this pair.
+   
+   Ads.start() is what puts Google's consent form and then iOS's tracking
+   prompt on screen. Starting it at boot raced the sheet below: both went up
+   at once and the system prompt landed ON TOP of the question that was meant
+   to explain it. So nothing starts until there is an answer — the sheet
+   first, then Save, then the system prompts, which is also the order Apple
+   asks for a pre-prompt to come in.
+   
+   A returning player has answered already, so for them this is the boot it
+   always was. */
+if (askConsent())
+    Ads.start();
 /* Android's hardware back button. Without a listener Capacitor leaves the
    Activity's default in place, which finishes it — so back quit the game from
    any screen, mid-puzzle included, with no warning and no way to say no. This

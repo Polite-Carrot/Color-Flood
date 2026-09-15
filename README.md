@@ -477,6 +477,29 @@ choices** — personalised ads, and usage data — and Settings reopens it. Esca
 does not dismiss it: closing it with neither answer recorded would mean asking
 again on the next launch, which teaches people to dismiss it faster.
 
+**It comes first, and nothing else starts until it is answered.** The order on
+a first launch is:
+
+```
+1  Your choices          the app's own sheet, explaining both
+2  Save
+3  Google's UMP form     where GDPR requires one and a message is published
+4  iOS tracking prompt   only if personalised ads were agreed to
+5  the banner, and the first interstitial warming
+```
+
+`Ads.start()` is what puts 3 and 4 on screen, so it is held back until Save.
+Called at boot it raced the sheet: both went up at once and the system prompt
+landed on top of the question that was meant to explain it. This is also the
+order Apple asks a pre-prompt to come in. A returning player has answered, so
+for them the stack starts at boot as it always did.
+
+Step 4 is skipped outright when personalised ads were declined. ATT is
+permission to use the advertising identifier, and somebody who has already
+said no is not going to have it used — `npa` goes on every request and the
+three ad grants are denied — so asking would be a system prompt whose answer
+the app already has.
+
 The answers live in the save as `ads` and `stats`, and **null is a third
 state**: "off because they said no" and "off because nobody has asked" want
 completely different things to happen next, and a boolean with a default would
