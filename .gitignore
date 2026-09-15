@@ -1,3 +1,7 @@
 node_modules/
 *.log
 www/
+
+# Firebase, per app and downloaded from the console — see README.
+google-services.json
+GoogleService-Info.plist

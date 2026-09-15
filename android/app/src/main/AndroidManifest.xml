@@ -42,6 +42,29 @@
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
             android:value="ca-app-pub-3940256099942544~3347511713"/>
+
+        <!-- Firebase Analytics starts collecting the moment the SDK loads,
+             which is before anybody has been asked anything. These flags
+             default it off; track.ts turns it on through the plugin once the
+             privacy sheet has been answered yes. The consent-mode defaults
+             below are the second half of the same thing: the deactivation
+             flag stops the process starting, the grants are what Analytics
+             reads on every event once it has. -->
+        <meta-data
+            android:name="firebase_analytics_collection_deactivated"
+            android:value="true"/>
+        <meta-data
+            android:name="google_analytics_default_allow_analytics_storage"
+            android:value="false"/>
+        <meta-data
+            android:name="google_analytics_default_allow_ad_storage"
+            android:value="false"/>
+        <meta-data
+            android:name="google_analytics_default_allow_ad_user_data"
+            android:value="false"/>
+        <meta-data
+            android:name="google_analytics_default_allow_ad_personalization_signals"
+            android:value="false"/>
     </application>
 
     <!-- Permissions -->

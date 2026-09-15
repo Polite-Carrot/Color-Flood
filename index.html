@@ -219,6 +219,35 @@
   </div>
 </div>
 
+<div id="overlay-privacy" class="overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="privacy-title">
+    <h2 id="privacy-title">Your choices</h2>
+    <p class="modal__line">
+      Two things to say yes or no to before you play. Either can be changed at
+      any time in Settings.
+    </p>
+    <div class="settings-list">
+      <div class="settings-row settings-row--stack">
+        <div>
+          <b>Personalized ads</b>
+          <p class="settings-row__note">Ads matched to what you are likely to enjoy. With this off ads still appear, but generic ones.</p>
+        </div>
+        <button id="privacy-ads" class="btn" type="button" aria-label="Personalized ads" aria-pressed="true">On</button>
+      </div>
+      <div class="settings-row settings-row--stack">
+        <div>
+          <b>Send usage data</b>
+          <p class="settings-row__note">Anonymous counts of which levels people get stuck on. It is what tells us a level is unfair rather than hard.</p>
+        </div>
+        <button id="privacy-stats" class="btn" type="button" aria-label="Send usage data" aria-pressed="true">On</button>
+      </div>
+    </div>
+    <div class="modal__actions">
+      <button id="privacy-save" class="btn btn--primary">Save</button>
+    </div>
+  </div>
+</div>
+
 <div id="overlay-settings" class="overlay" hidden>
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <h2 id="settings-title">Settings</h2>
@@ -230,6 +259,10 @@
       <div class="settings-row">
         <span>Color Blind Assist</span>
         <button id="set-marks" class="btn" type="button" aria-pressed="true">On</button>
+      </div>
+      <div class="settings-row">
+        <span>Privacy choices</span>
+        <button id="set-privacy" class="btn" type="button">Open&hellip;</button>
       </div>
       <div class="settings-row settings-row--danger">
         <span>Reset progress</span>

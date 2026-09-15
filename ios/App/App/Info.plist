@@ -57,6 +57,20 @@
 	<string>Allow tracking to see ads relevant to you. You can decline and see less personalised ads.</string>
 	<!-- Google's SKAdNetwork identifier, so Apple attributes installs that
 	     came from a Google-served ad. -->
+	<!-- Firebase Analytics starts collecting as soon as the SDK loads, which
+	     is before anybody has been asked anything. These default it off;
+	     track.ts turns it on through the plugin once the privacy sheet has
+	     been answered yes. -->
+	<key>FIREBASE_ANALYTICS_COLLECTION_DEACTIVATED</key>
+	<true/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_ANALYTICS_STORAGE</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_STORAGE</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_USER_DATA</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS</key>
+	<false/>
 	<key>SKAdNetworkItems</key>
 	<array>
 		<dict>

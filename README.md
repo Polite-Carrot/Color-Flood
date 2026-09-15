@@ -397,6 +397,73 @@ asks Google for anything:
 https://polite-carrot.github.io/Color-Flood/?ads=preview
 ```
 
+### Analytics
+
+Off until somebody says yes, and it is a real question rather than a banner
+that assumes one. The first launch with anything to consent to shows **Your
+choices** — personalised ads, and usage data — and Settings reopens it. Escape
+does not dismiss it: closing it with neither answer recorded would mean asking
+again on the next launch, which teaches people to dismiss it faster.
+
+The answers live in the save as `ads` and `stats`, and **null is a third
+state**: "off because they said no" and "off because nobody has asked" want
+completely different things to happen next, and a boolean with a default would
+have quietly made the second look like the first.
+
+Two backends behind one call:
+
+| Platform | Route | Configured by |
+|----------|-------|---------------|
+| Web | GA4 web stream, `gtag.js` | `MEASUREMENT_ID` in `track.ts` — **empty**, so the web build is inert |
+| iOS, Android | Firebase, `@capacitor-firebase/analytics` | `GoogleService-Info.plist`, `google-services.json` |
+
+Five events, named to match the sort game's so a funnel reads across both:
+
+```
+puzzle_start   game, screen, level, size, palette, par
+puzzle_done    + moves, over_par
+hint_used      + moves, hint
+out_of_moves   + moves
+```
+
+`out_of_moves` is the one worth having. A level that runs people out of moves
+far more often than its neighbours is not hard, it is **wrong** — and since
+every campaign level is dealt from a seed rather than drawn by hand, that is
+the only way to find out short of watching somebody play all hundred.
+
+**Nothing starts collecting before the answer.** Firebase begins the moment
+its SDK loads, which is before any sheet appears, so the Android manifest and
+the iOS plist ship it *deactivated* and `track.ts` turns it on through the
+plugin afterwards. That is two flips, not one: the deactivation flag stops the
+process starting at boot, and the Consent Mode v2 grants are what Analytics
+reads on every event once it has. Setting one without the other looks like it
+worked and sends nothing. Saying no to personalised ads denies the three
+ad-related grants while analytics stays granted — one no does not have to mean
+two.
+
+Every call is safe at any time: before consent, with no id, with no plugin, or
+with the script blocked by an ad blocker, `event()` does nothing and throws
+nothing, and the native call is never awaited by anything the player is
+waiting on. Analytics failing must not cost somebody their game.
+
+**The two config files are not in this repository** — they are per-app, they
+are yours, and they are gitignored:
+
+```
+android/app/google-services.json
+ios/App/App/GoogleService-Info.plist
+```
+
+`npm run sync` **refuses to run without them**, which is deliberate rather
+than fussy: the iOS plugin calls `FirebaseApp.configure()` from its `load()`,
+`load()` runs at bridge startup, and an app bundled without its plist does not
+fail to build and does not fail to report — it CRASHES on launch, on the
+tester's phone, naming a file that is nowhere in this repository. Use
+`ALLOW_NO_FIREBASE=1 npm run sync` to build without it on purpose.
+
+Android degrades quietly instead: Capacitor's own `build.gradle` applies the
+google-services plugin only if the JSON is there.
+
 #### The interstitial
 
 One fires when **both** of these have happened since the last one:
@@ -446,6 +513,7 @@ To ship for real, three files:
 | File | What to change |
 |------|----------------|
 | `src/ads.ts` | `INTERSTITIAL` and `BANNER` — the Android and iOS **ad unit** IDs |
+| `src/track.ts` | `MEASUREMENT_ID` — the GA4 **web** stream id, for the web build only |
 | `android/app/src/main/AndroidManifest.xml` | `com.google.android.gms.ads.APPLICATION_ID` — the **app** ID |
 | `ios/App/App/Info.plist` | `GADApplicationIdentifier` — the **app** ID |
 
@@ -530,6 +598,7 @@ from, and `git push` is the deploy.
 | `src/app.ts` | The browser build. |
 | `src/sound.ts` | The blips. With `app.ts`, the only files in `src/` that know a DOM exists. |
 | `src/ads.ts` | When an interstitial is allowed to appear, and the AdMob call that shows it. A no-op off a phone. |
+| `src/track.ts` | Consented analytics: GA4 on the web, Firebase on a phone. Inert until somebody says yes. |
 | `src/cli.ts` | Deals a board and prints it to a terminal. |
 
 `generator.ts`, `play.ts`, `levels.ts`, `campaign.ts` and `palette.ts` are all

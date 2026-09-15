@@ -20,6 +20,7 @@ import {
 import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from './campaign.ts';
 import { Sound } from './sound.ts';
 import { Ads, adPreviewOnScreen, startAdPreview } from './ads.ts';
+import { Track, type Params } from './track.ts';
 
 /* ------------------------------------------------------------------ scaffolding */
 
@@ -75,6 +76,12 @@ type Saved = {
      and dealing a hundred of them to colour a hundred tiles would cost
      several seconds of a screen that is only a grid of numbers. */
   progress: Record<Mode, { best: number[]; par: number[] }>;
+  /* The two consent answers. NULL means not asked yet, which is a third state
+     and has to be: "off because they said no" and "off because nobody has
+     asked" want completely different things to happen next. A boolean with a
+     default would have quietly made the second look like the first. */
+  ads: boolean | null;
+  stats: boolean | null;
 };
 
 const blankRun = (): number[] => new Array<number>(CAMPAIGN_LENGTH).fill(0);
@@ -83,6 +90,7 @@ const blankProgress = () => ({ best: blankRun(), par: blankRun() });
 const DEFAULTS: Saved = {
   sound: true, marks: true, days: [], difficulty: 'easy', mode: 'flood',
   progress: { flood: blankProgress(), merge: blankProgress() },
+  ads: null, stats: null,
 };
 
 /* Read a saved campaign back defensively. A run that is the wrong length —
@@ -127,6 +135,11 @@ function load(): Saved {
         flood: readProgress((got.progress as Record<string, unknown> | undefined)?.flood),
         merge: readProgress((got.progress as Record<string, unknown> | undefined)?.merge),
       },
+      /* Anything that is not a boolean — missing, or a save from before this
+         existed — is "not asked", which is what makes a returning player see
+         the sheet once rather than never. */
+      ads: typeof got.ads === 'boolean' ? got.ads : null,
+      stats: typeof got.stats === 'boolean' ? got.stats : null,
     };
   } catch {
     /* Private browsing, or storage switched off. The game is perfectly
@@ -367,6 +380,10 @@ function tryPlay(index: number): void {
     Sound.nope();
     say('That color was not touching the blob, so nothing moved — but the move is spent.', 'is-warn');
   } else if (movesLeft(game) === 0) {
+    /* The one that is worth having. A level that runs people out of moves far
+       more often than its neighbours is not hard, it is wrong, and this is
+       the only way to tell those apart without watching somebody play it. */
+    Track.event('out_of_moves', { ...where(), moves: game.played.length });
     say('Out of moves, and the board is not one color yet. Undo, or restart.', 'is-warn');
   } else if (movesLeft(game) === 1) {
     say('One move left.', 'is-warn');
@@ -417,6 +434,9 @@ function runHint(): void {
 
   session.hintsLeft -= 1;
   session.hinted = best.colour;
+  Track.event('hint_used', {
+    ...where(), moves: game.played.length, hint: HINTS - session.hintsLeft,
+  });
   paint();
 
   const name = colour(best.colour).name;
@@ -492,6 +512,7 @@ function finish(): void {
     again.textContent = 'New puzzle';
     home.textContent = 'Home';
   }
+  Track.event('puzzle_done', { ...where(), moves: used, over_par: used - game.level.par });
   Sound.win();
   /* One finished board towards the ad cadence. Counted here, at the win
      itself, rather than at the button that leaves it: a player who closes the
@@ -540,6 +561,7 @@ function begin(kind: 'daily' | 'random', setting: Setting, seed: string, day: st
      back to sizing itself to its own letters — a 7×7 board about a fifth of
      the width it should be. */
   show('screen-game');
+  Track.event('puzzle_start', where());
   $('brief').textContent = '';
   buildBoard(level);
   paint();
@@ -599,6 +621,7 @@ function playCampaign(mode: Mode, n: number, button: HTMLButtonElement): void {
     $('level-sub').textContent = entry.name + ' · ' + entry.level.width + '×' +
       entry.level.height + ' · par ' + entry.level.par;
     $('brief').textContent = entry.brief;
+    Track.event('puzzle_start', where());
     buildBoard(entry.level);
     paint();
     sizeBoard();
@@ -864,6 +887,29 @@ function wire(): void {
     else show('screen-home');
   });
 
+  for (const id of ['privacy-ads', 'privacy-stats']) {
+    $(id).addEventListener('click', () => {
+      /* The button carries the answer until Save is pressed, not the save —
+         nothing is decided by tapping a switch and then backing out. */
+      const now = $(id).getAttribute('aria-pressed') === 'true';
+      $(id).textContent = now ? 'Off' : 'On';
+      $(id).setAttribute('aria-pressed', String(!now));
+      Sound.tap();
+    });
+  }
+  $('privacy-save').addEventListener('click', () => {
+    saved.ads = $('privacy-ads').getAttribute('aria-pressed') === 'true';
+    saved.stats = $('privacy-stats').getAttribute('aria-pressed') === 'true';
+    save();
+    applyConsent();
+    closeOverlay('overlay-privacy');
+  });
+  $('set-privacy').addEventListener('click', () => {
+    closeOverlay('overlay-settings');
+    paintPrivacy();
+    openOverlay('overlay-privacy');
+  });
+
   $('how-to').addEventListener('click', () => openOverlay('overlay-howto'));
   /* Settings is reachable from the board as well as from home. Colour Blind
      Assist is the reason: the moment somebody wants it is the moment they are
@@ -944,6 +990,9 @@ function wire(): void {
   });
 
   window.addEventListener('keydown', (e) => {
+    /* The privacy sheet is deliberately not in this list: Escape would close
+       it with neither answer recorded, and it would be asked again on the next
+       load. Save is the only way out of it. */
     if (!$('overlay-win').hidden || !$('overlay-howto').hidden || !$('overlay-settings').hidden) {
       if (e.key === 'Escape') {
         for (const id of ['overlay-win', 'overlay-howto', 'overlay-settings']) closeOverlay(id);
@@ -972,6 +1021,55 @@ function wire(): void {
   measure();
 }
 
+/* ------------------------------------------------------------------ events */
+
+/* What every event says about the board it happened on. One shape for all of
+   them, so a campaign level and a daily can be compared in the same report
+   without anybody remembering which name each screen used. */
+function where(): Params {
+  if (!session) return {};
+  const { setting, campaign, kind, game } = session;
+  return {
+    game: setting.mode,
+    screen: kind,
+    level: campaign ? String(campaign.n) : kind === 'daily' ? session.day : setting.key,
+    size: game.level.width + 'x' + game.level.height,
+    palette: game.level.palette,
+    par: game.level.par,
+  };
+}
+
+/* ------------------------------------------------------------------ consent */
+
+/* Both answers in one place, applied to both things that read them. Called on
+   boot and on every change, so there is no path where a switch is flipped and
+   only one of the two ends up knowing. */
+function applyConsent(): void {
+  const ads = saved.ads !== false;
+  Ads.setPersonalised(ads);
+  if (saved.stats === true) void Track.start(ads);
+  else void Track.stop();
+}
+
+function paintPrivacy(): void {
+  for (const [id, on] of [['privacy-ads', saved.ads !== false],
+                          ['privacy-stats', saved.stats !== false]] as const) {
+    $(id).textContent = on ? 'On' : 'Off';
+    $(id).setAttribute('aria-pressed', String(on));
+  }
+}
+
+/* Asked once, before the first puzzle. Not asked at all where there is
+   nothing to ask about: the web build with no measurement id set has no
+   analytics to consent to and no ads either, and a consent sheet for neither
+   is just a door in front of the game. */
+function askConsent(): void {
+  if (saved.ads !== null && saved.stats !== null) return;
+  if (!Track.configured() && !Ads.native()) return;
+  paintPrivacy();
+  openOverlay('overlay-privacy');
+}
+
 function paintSettings(): void {
   for (const [id, on] of [['set-sound', saved.sound], ['set-marks', saved.marks]] as const) {
     $(id).textContent = on ? 'On' : 'Off';
@@ -986,6 +1084,8 @@ paintRandomScreen();
    prompt land while the player is still looking at the home screen, and the
    first interstitial is warm long before anything is allowed to show it. */
 Ads.start();
+applyConsent();
+askConsent();
 /* Only ever with ?ads=preview in the URL. Draws an empty box the size of the
    banner so the layout can be looked at without a phone build. The home
    screen is the one marked active in the HTML, so it starts on. */
