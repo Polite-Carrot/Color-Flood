@@ -19,6 +19,7 @@ import {
 } from './levels.ts';
 import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from './campaign.ts';
 import { Sound } from './sound.ts';
+import { Haptics } from './haptics.ts';
 import { Ads, adPreviewOnScreen, startAdPreview } from './ads.ts';
 import { Track, type Params } from './track.ts';
 import { shareText } from './share.ts';
@@ -62,6 +63,10 @@ type Saved = {
      tritanopia. The letter is what carries those boards, which is why it is on
      by default and why it is drawn to be read rather than to be tasteful. */
   marks: boolean;
+  /* Haptics get their own switch rather than following the sound. They are a
+     different sense: somebody playing muted in bed may well want the taps,
+     and somebody who hates them wants them gone without losing the blips. */
+  buzz: boolean;
   /* Every daily ever finished, by its calendar day. The streak, the best
      streak and the total are all worked out from this rather than kept
      beside it — a counter has to be nudged at exactly the right moments and
@@ -90,7 +95,7 @@ const blankRun = (): number[] => new Array<number>(CAMPAIGN_LENGTH).fill(0);
 const blankProgress = () => ({ best: blankRun(), par: blankRun() });
 
 const DEFAULTS: Saved = {
-  sound: true, marks: true, days: [], difficulty: 'easy', mode: 'flood',
+  sound: true, marks: true, buzz: true, days: [], difficulty: 'easy', mode: 'flood',
   progress: { flood: blankProgress(), merge: blankProgress() },
   ads: null, stats: null,
 };
@@ -123,6 +128,7 @@ function load(): Saved {
     return {
       sound: typeof got.sound === 'boolean' ? got.sound : DEFAULTS.sound,
       marks: typeof got.marks === 'boolean' ? got.marks : DEFAULTS.marks,
+      buzz: typeof got.buzz === 'boolean' ? got.buzz : DEFAULTS.buzz,
       /* A save from before the calendar kept only the last day played. It is
          one day rather than none, so it is carried over rather than dropped —
          somebody's streak of one is still their streak. */
@@ -361,6 +367,7 @@ function tryPlay(index: number): void {
   if (won(game)) return;
   if (movesLeft(game) <= 0) {
     Sound.nope();
+    Haptics.nope();
     say('Out of moves — undo a move, or restart and try a different line.', 'is-warn');
     return;
   }
@@ -376,10 +383,12 @@ function tryPlay(index: number): void {
      goes. Counted off the blob rather than the moves used, because a move
      that takes forty cells should not sound like one that takes two. */
   const held = blobOf(game).reduce((n, row) => n + row.filter(Boolean).length, 0);
-  if (gained.length) Sound.flood(held / (game.level.width * game.level.height));
+  const share = held / (game.level.width * game.level.height);
+  if (gained.length) { Sound.flood(share); Haptics.flood(share); }
 
   if (!gained.length) {
     Sound.nope();
+    Haptics.nope();
     say('That color was not touching the blob, so nothing moved — but the move is spent.', 'is-warn');
   } else if (movesLeft(game) === 0) {
     /* The one that is worth having. A level that runs people out of moves far
@@ -530,6 +539,7 @@ function finish(): void {
   }
   Track.event('puzzle_done', { ...where(), moves: used, over_par: used - game.level.par });
   Sound.win();
+  Haptics.win();
   /* One finished board towards the ad cadence. Counted here, at the win
      itself, rather than at the button that leaves it: a player who closes the
      card with Escape has still finished the puzzle. */
@@ -987,6 +997,16 @@ function wire(): void {
     else Sound.hush();
   });
 
+  $('set-buzz').addEventListener('click', () => {
+    saved.buzz = !saved.buzz;
+    Haptics.on = saved.buzz;
+    save();
+    paintSettings();
+    /* Same reasoning as the sound: switching it on demonstrates itself, which
+       is the only way to know what you have just agreed to. */
+    if (saved.buzz) Haptics.flood(1);
+  });
+
   $('set-marks').addEventListener('click', () => {
     saved.marks = !saved.marks;
     save();
@@ -1282,13 +1302,15 @@ function askConsent(): boolean {
 }
 
 function paintSettings(): void {
-  for (const [id, on] of [['set-sound', saved.sound], ['set-marks', saved.marks]] as const) {
+  for (const [id, on] of
+       [['set-sound', saved.sound], ['set-buzz', saved.buzz], ['set-marks', saved.marks]] as const) {
     $(id).textContent = on ? 'On' : 'Off';
     $(id).setAttribute('aria-pressed', String(on));
   }
 }
 
 Sound.on = saved.sound;
+Haptics.on = saved.buzz;
 wire();
 paintRandomScreen();
 paintHome();

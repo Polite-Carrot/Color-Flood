@@ -776,6 +776,7 @@ from, and `git push` is the deploy.
 | `src/app.ts` | The browser build. |
 | `src/sound.ts` | The blips. With `app.ts`, the only files in `src/` that know a DOM exists. |
 | `src/share.ts` | A finished daily, as three lines you can paste. Pure, so it has a test. |
+| `src/haptics.ts` | The taps you feel. The same three moments the sound marks, native only. |
 | `src/ads.ts` | When an interstitial is allowed to appear, and the AdMob call that shows it. A no-op off a phone. |
 | `src/track.ts` | Consented analytics: GA4 on the web, Firebase on a phone. Inert until somebody says yes. |
 | `src/cli.ts` | Deals a board and prints it to a terminal. |
@@ -804,6 +805,31 @@ bandRadius(width, height, origin): number
 `solve` returns `null` rather than a number if it hits its state cap, which
 defaults to 200,000. Boards out of `generate` settle in a few hundred states;
 the cap is there for a board handed in from somewhere else.
+
+### Haptics
+
+The same three moments the sound marks, in the other sense: a move that takes
+ground, a move that takes none, and the win. **Not** the buttons — a phone
+that buzzes on every tap is a phone somebody switches the feature off on, and
+then it is not there for the moments that matter.
+
+How hard it lands follows how much the move took, the way the sound's pitch
+does: a move taking under 12% of the board is a `LIGHT` impact, more than that
+a `MEDIUM` one. That threshold is the one real decision in the file, so it is
+the one thing with a test — one cell of a 14×14 must not feel like a third of
+the board.
+
+It has **its own switch**, not the sound's. They are different senses:
+somebody playing muted in bed may well want the taps, and somebody who hates
+them wants them gone without losing the blips. Switching it on gives one
+straight away, which is the only way to know what you have just agreed to.
+
+Native only. There is a vibration API on the web, but iOS Safari does not
+support it, most desktop browsers ignore it, and on Android it is a blunt buzz
+rather than the tuned click the native engine gives. Reached through the
+bridge for the same reason everything else here is — nothing is bundled — and
+after one rejection it stops asking for the rest of the session, because a
+phone with the engine switched off system-wide will refuse every call.
 
 ## Coming back, and telling people
 

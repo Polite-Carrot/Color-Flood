@@ -13,6 +13,7 @@ import { blobOf, blobColour, canPlay, movesLeft, play, restart, start, undo, won
 import { MODES, bestStreakOf, dailySeed, dailySetting, dayKey, firstDailyDate, isPlayableDay, modeLabel, optionsFor, settingFor, settingsFor, streakOf, } from "./levels.js";
 import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from "./campaign.js";
 import { Sound } from "./sound.js";
+import { Haptics } from "./haptics.js";
 import { Ads, adPreviewOnScreen, startAdPreview } from "./ads.js";
 import { Track } from "./track.js";
 import { shareText } from "./share.js";
@@ -40,7 +41,7 @@ function closeOverlay(id) { $(id).hidden = true; }
 const blankRun = () => new Array(CAMPAIGN_LENGTH).fill(0);
 const blankProgress = () => ({ best: blankRun(), par: blankRun() });
 const DEFAULTS = {
-    sound: true, marks: true, days: [], difficulty: 'easy', mode: 'flood',
+    sound: true, marks: true, buzz: true, days: [], difficulty: 'easy', mode: 'flood',
     progress: { flood: blankProgress(), merge: blankProgress() },
     ads: null, stats: null,
 };
@@ -72,6 +73,7 @@ function load() {
         return {
             sound: typeof got.sound === 'boolean' ? got.sound : DEFAULTS.sound,
             marks: typeof got.marks === 'boolean' ? got.marks : DEFAULTS.marks,
+            buzz: typeof got.buzz === 'boolean' ? got.buzz : DEFAULTS.buzz,
             /* A save from before the calendar kept only the last day played. It is
                one day rather than none, so it is carried over rather than dropped —
                somebody's streak of one is still their streak. */
@@ -290,6 +292,7 @@ function tryPlay(index) {
         return;
     if (movesLeft(game) <= 0) {
         Sound.nope();
+        Haptics.nope();
         say('Out of moves — undo a move, or restart and try a different line.', 'is-warn');
         return;
     }
@@ -304,10 +307,14 @@ function tryPlay(index) {
        goes. Counted off the blob rather than the moves used, because a move
        that takes forty cells should not sound like one that takes two. */
     const held = blobOf(game).reduce((n, row) => n + row.filter(Boolean).length, 0);
-    if (gained.length)
-        Sound.flood(held / (game.level.width * game.level.height));
+    const share = held / (game.level.width * game.level.height);
+    if (gained.length) {
+        Sound.flood(share);
+        Haptics.flood(share);
+    }
     if (!gained.length) {
         Sound.nope();
+        Haptics.nope();
         say('That color was not touching the blob, so nothing moved — but the move is spent.', 'is-warn');
     }
     else if (movesLeft(game) === 0) {
@@ -460,6 +467,7 @@ function finish() {
     }
     Track.event('puzzle_done', { ...where(), moves: used, over_par: used - game.level.par });
     Sound.win();
+    Haptics.win();
     /* One finished board towards the ad cadence. Counted here, at the win
        itself, rather than at the button that leaves it: a player who closes the
        card with Escape has still finished the puzzle. */
@@ -901,6 +909,16 @@ function wire() {
         else
             Sound.hush();
     });
+    $('set-buzz').addEventListener('click', () => {
+        saved.buzz = !saved.buzz;
+        Haptics.on = saved.buzz;
+        save();
+        paintSettings();
+        /* Same reasoning as the sound: switching it on demonstrates itself, which
+           is the only way to know what you have just agreed to. */
+        if (saved.buzz)
+            Haptics.flood(1);
+    });
     $('set-marks').addEventListener('click', () => {
         saved.marks = !saved.marks;
         save();
@@ -1210,12 +1228,13 @@ function askConsent() {
     return false;
 }
 function paintSettings() {
-    for (const [id, on] of [['set-sound', saved.sound], ['set-marks', saved.marks]]) {
+    for (const [id, on] of [['set-sound', saved.sound], ['set-buzz', saved.buzz], ['set-marks', saved.marks]]) {
         $(id).textContent = on ? 'On' : 'Off';
         $(id).setAttribute('aria-pressed', String(on));
     }
 }
 Sound.on = saved.sound;
+Haptics.on = saved.buzz;
 wire();
 paintRandomScreen();
 paintHome();
