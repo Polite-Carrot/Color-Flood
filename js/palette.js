@@ -14,16 +14,16 @@
  * looked at by somebody who cannot easily tell two of them apart, still has to
  * be readable. So the palette is chosen so all ten initials differ. */
 export const PALETTE = [
-    { hex: '#f5423c', mark: 'R', name: 'red' },
-    { hex: '#3b7bf7', mark: 'B', name: 'blue' },
-    { hex: '#ffd028', mark: 'Y', name: 'yellow' },
-    { hex: '#2fc15e', mark: 'G', name: 'green' },
-    { hex: '#9a53ef', mark: 'P', name: 'purple' },
-    { hex: '#ff8700', mark: 'O', name: 'orange' },
-    { hex: '#0ec3c6', mark: 'T', name: 'teal' },
-    { hex: '#ff5aae', mark: 'M', name: 'magenta' },
-    { hex: '#fbfdff', mark: 'W', name: 'white' },
-    { hex: '#22c8ff', mark: 'C', name: 'cyan' },
+    { hex: '#f5423c', mark: 'R', name: 'red', square: '🟥' },
+    { hex: '#3b7bf7', mark: 'B', name: 'blue', square: '🟦' },
+    { hex: '#ffd028', mark: 'Y', name: 'yellow', square: '🟨' },
+    { hex: '#2fc15e', mark: 'G', name: 'green', square: '🟩' },
+    { hex: '#9a53ef', mark: 'P', name: 'purple', square: '🟪' },
+    { hex: '#ff8700', mark: 'O', name: 'orange', square: '🟧' },
+    { hex: '#0ec3c6', mark: 'T', name: 'teal', square: '🟫' },
+    { hex: '#ff5aae', mark: 'M', name: 'magenta', square: '🟪' },
+    { hex: '#fbfdff', mark: 'W', name: 'white', square: '⬜' },
+    { hex: '#22c8ff', mark: 'C', name: 'cyan', square: '🟦' },
 ];
 /* The first six are the ones a puzzle reaches for first, and they are ordered
    so that a four-colour board is red / blue / yellow / green — the four a

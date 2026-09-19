@@ -775,6 +775,7 @@ from, and `git push` is the deploy.
 | `src/palette.ts` | What a color index looks like. The generator never sees it. |
 | `src/app.ts` | The browser build. |
 | `src/sound.ts` | The blips. With `app.ts`, the only files in `src/` that know a DOM exists. |
+| `src/share.ts` | A finished daily, as four lines you can paste. Pure, so it has a test. |
 | `src/ads.ts` | When an interstitial is allowed to appear, and the AdMob call that shows it. A no-op off a phone. |
 | `src/track.ts` | Consented analytics: GA4 on the web, Firebase on a phone. Inert until somebody says yes. |
 | `src/cli.ts` | Deals a board and prints it to a terminal. |
@@ -803,6 +804,43 @@ bandRadius(width, height, origin): number
 `solve` returns `null` rather than a number if it hits its state cap, which
 defaults to 200,000. Boards out of `generate` settle in a few hundred states;
 the cap is there for a board handed in from somewhere else.
+
+## Coming back, and telling people
+
+**Continue** takes the tagline's place on the home screen. The line under the
+title is for somebody who has never played; once they have, the one thing
+worth putting in that slot is the way back to where they got to — so it
+replaces the line rather than being squeezed in beside it, and the menu below
+does not move either way. It goes to the first unfinished level of the
+campaign last played, or the other one if that campaign is finished, and it is
+not there at all on a save with nothing in it.
+
+The home cards carry the same numbers as the screens behind them: how many of
+the thousand are done, and whether today's daily is. They were written into
+the HTML as "100 levels" and went stale the moment the campaigns grew — the
+ids were there to be filled and never were.
+
+**Share** is on the win card, and only on a daily. A campaign level is the
+same board for everybody whenever they reach it, so there is no "today" to
+have done better at, and a random board is nobody else's.
+
+```
+Color Flood · 2026-09-19
+Merge · Extra Hard · 12 moves · par! · 1 hint
+🟩🟦🟨🟥🟪🟧🟨🟧🟥🟪🟦🟩
+polite-carrot.github.io/Color-Flood
+```
+
+The squares are the moves played, in order, and they are the whole point:
+they say how the board fell without giving away anything about the board, so
+whoever reads it has the same puzzle ahead of them. A test holds that line —
+one square per move and nothing else.
+
+`navigator.share` where it exists, which on iOS is the sheet every other app
+uses; the clipboard where it does not, which is every Android web view.
+Cancelling the sheet throws `AbortError`, and that is somebody saying no
+rather than something failing, so it does not fall through to quietly copying
+instead.
 
 ## Seeds
 

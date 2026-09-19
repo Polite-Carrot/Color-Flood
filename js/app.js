@@ -15,6 +15,7 @@ import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from "./campaign.js";
 import { Sound } from "./sound.js";
 import { Ads, adPreviewOnScreen, startAdPreview } from "./ads.js";
 import { Track } from "./track.js";
+import { shareText } from "./share.js";
 /* ------------------------------------------------------------------ scaffolding */
 const $ = (id) => {
     const el = document.getElementById(id);
@@ -31,6 +32,8 @@ function show(screen) {
        it behind. */
     Ads.onScreen(screen);
     adPreviewOnScreen(screen);
+    if (screen === 'screen-home')
+        paintHome();
 }
 function openOverlay(id) { $(id).hidden = false; }
 function closeOverlay(id) { $(id).hidden = true; }
@@ -387,7 +390,7 @@ function runHint() {
 function finish() {
     if (!session)
         return;
-    const { game, kind, setting, day, campaign } = session;
+    const { game, kind, setting, day, campaign, hintsLeft } = session;
     const used = game.played.length;
     if (kind === 'daily')
         recordDaily(day);
@@ -421,6 +424,20 @@ function finish() {
     const next = $('win-next');
     const again = $('win-again');
     const home = $('win-home');
+    const share = $('win-share');
+    /* Only the daily. A campaign level is the same board for everybody whenever
+       they reach it, so there is no "today" to have done better at; a random
+       board is nobody else's. The daily is the only one where the squares mean
+       something to the person reading them. */
+    share.hidden = kind !== 'daily';
+    share.textContent = 'Share';
+    share.disabled = false;
+    if (kind === 'daily') {
+        share.onclick = () => void offerShare(share, shareText({
+            day, game: modeLabel(setting.mode), setting: setting.label,
+            par, moves: game.played.slice(), hints: HINTS - hintsLeft,
+        }));
+    }
     if (campaign) {
         next.hidden = campaign.n >= CAMPAIGN_LENGTH;
         again.hidden = true;
@@ -523,6 +540,12 @@ function unlocked(mode, n) {
     return n === 1 || saved.progress[mode].best[n - 2] > 0;
 }
 function playCampaign(mode, n, button) {
+    /* So Continue comes back to the campaign you were actually in. The Random
+       screen reads the same field, which is the behaviour you want there too. */
+    if (saved.mode !== mode) {
+        saved.mode = mode;
+        save();
+    }
     dealing(button, () => {
         let entry;
         try {
@@ -969,6 +992,104 @@ function wire() {
     window.visualViewport?.addEventListener('resize', measure);
     measure();
 }
+/* ------------------------------------------------------------------ sharing */
+/* The share sheet where there is one, the clipboard where there is not.
+   
+   navigator.share is the right thing on iOS — it is the sheet every other app
+   uses — and it does not exist in an Android web view at all, which is why
+   this is a chain rather than a choice. Cancelling the sheet throws
+   AbortError, and that is somebody saying no rather than something failing,
+   so it must not fall through to quietly copying instead. */
+async function offerShare(button, text) {
+    const nav = navigator;
+    if (nav.share) {
+        try {
+            await nav.share({ text });
+            return;
+        }
+        catch (err) {
+            if (err?.name === 'AbortError')
+                return;
+            /* Anything else — no permission, an unsupported payload — falls through
+               to the clipboard, which is better than nothing happening. */
+        }
+    }
+    try {
+        await navigator.clipboard.writeText(text);
+        said(button, 'Copied');
+    }
+    catch {
+        said(button, 'Could not copy');
+    }
+}
+/* Says so on the button itself for a moment. A status line at the bottom of
+   the screen is the wrong place for the answer to a button at the top of a
+   modal. */
+function said(button, what) {
+    const was = button.textContent;
+    button.textContent = what;
+    button.disabled = true;
+    setTimeout(() => { button.textContent = was; button.disabled = false; }, 1400);
+}
+/* ------------------------------------------------------------------ continue */
+/* The first level of a campaign nobody has finished yet, or 0 when the whole
+   thousand is done. */
+function nextUnplayed(mode) {
+    const best = saved.progress[mode].best;
+    for (let n = 1; n <= CAMPAIGN_LENGTH; n++)
+        if (!(best[n - 1] > 0))
+            return n;
+    return 0;
+}
+/* Where "Continue" goes: the mode last played, unless it is finished, in
+   which case the other one. Null when neither campaign has been started — a
+   Continue button on a save with nothing in it is a button that lies. */
+function resumeAt() {
+    const started = (m) => saved.progress[m].best.some((b) => b > 0);
+    const order = saved.mode === 'merge' ? ['merge', 'flood'] : ['flood', 'merge'];
+    for (const mode of order) {
+        if (!started(mode))
+            continue;
+        const n = nextUnplayed(mode);
+        if (n)
+            return { mode, n };
+    }
+    return null;
+}
+/* The tagline is for somebody who has never played. Once they have, the one
+   thing worth putting in that slot is the way back to where they got to — so
+   it takes the line's place rather than being squeezed in beside it, and the
+   menu underneath does not move either way. */
+function paintHome() {
+    /* The cards carry the same numbers the screens behind them do. They were
+       written into the HTML as "100 levels" and went stale the moment the
+       campaigns grew — the ids were there to be filled and never were. */
+    for (const mode of MODES) {
+        const best = saved.progress[mode].best;
+        const done = best.filter((m) => m > 0).length;
+        $('home-' + mode + '-sub').textContent = done
+            ? done + ' of ' + CAMPAIGN_LENGTH + ' done'
+            : CAMPAIGN_LENGTH + ' levels, ' +
+                (mode === 'merge' ? 'from two corners at once' : 'from one corner');
+    }
+    const solved = new Set(saved.days);
+    const streak = streakOf(solved, new Date());
+    $('home-daily-sub').textContent = solved.has(dayKey(new Date()))
+        ? 'Done today' + (streak > 1 ? ' · ' + streak + ' day streak' : '')
+        : streak > 0
+            ? 'Not done today · ' + streak + ' day streak to keep'
+            : 'The same board for everybody, every day';
+    const at = resumeAt();
+    const button = $('go-continue');
+    button.hidden = !at;
+    const tag = document.querySelector('.masthead__tag');
+    if (tag instanceof HTMLElement)
+        tag.hidden = !!at;
+    if (!at)
+        return;
+    button.textContent = 'Continue · ' + modeLabel(at.mode) + ' ' + at.n;
+    button.onclick = () => playCampaign(at.mode, at.n, button);
+}
 /* ------------------------------------------------------------------ going back */
 function leaveBoard() {
     if (session?.campaign)
@@ -1097,6 +1218,7 @@ function paintSettings() {
 Sound.on = saved.sound;
 wire();
 paintRandomScreen();
+paintHome();
 /* Native only, and deliberately at boot: the GDPR form and iOS's tracking
    prompt land while the player is still looking at the home screen, and the
    first interstitial is warm long before anything is allowed to show it. */

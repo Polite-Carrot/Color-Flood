@@ -303,6 +303,16 @@ input:focus-visible {
    fall into the gaps instead (space-evenly) put 52px between the cards, more
    than three times the sort game's, and it read as four separate things
    rather than one menu. */
+/* Takes the tagline's place once there is something to continue. The line
+   under the title is for somebody who has never played; after that, the one
+   thing worth putting there is the way back to where they got to. Same slot,
+   so the menu below it does not move. */
+.masthead__continue {
+  margin: clamp(8px, 2vh, 16px) auto 0;
+  font-size: clamp(16px, 2.1vh, 19px);
+  padding: 11px 22px;
+}
+
 .choices {
   flex: 1;
   min-height: 0;
