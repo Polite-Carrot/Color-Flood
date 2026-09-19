@@ -1,16 +1,20 @@
 /* share.ts — the daily, as something you can paste.
  *
- * Four lines, in the shape everybody already knows from Wordle: what it was,
- * how it went, the run of moves as coloured squares, and where to play it.
- * The squares are the point — they say how the board fell without giving away
- * a single thing about the board, so the person reading it has the same
- * puzzle ahead of them that you had.
+ * Three lines, in the shape everybody already knows from Wordle: what it was,
+ * how it went, and the run of moves as coloured squares. The squares are the
+ * point — they say how the board fell without giving away a single thing
+ * about the board, so the person reading it has the same puzzle ahead of them
+ * that you had.
+ *
+ * There is no fourth line pointing anywhere. There was, and it pointed at the
+ * GitHub Pages build, which is where the game is developed rather than where
+ * anybody should be sent. When there is a store listing to name, it goes back
+ * as one more entry in the array below.
  *
  * Pure, and separated from the button for that reason: the text is the part
  * with a right answer, and the clipboard is the part that behaves differently
  * on every platform. */
 import { PALETTE } from "./palette.js";
-export const SITE = 'polite-carrot.github.io/Color-Flood';
 export function shareText(r) {
     const used = r.moves.length;
     /* "7 of 6" reads as a fraction of the par rather than a score out of it,
@@ -22,6 +26,5 @@ export function shareText(r) {
         'Color Flood · ' + r.day,
         r.game + ' · ' + r.setting + ' · ' + score + hints,
         r.moves.map((c) => PALETTE[c]?.square ?? '⬜').join(''),
-        SITE,
     ].join('\n');
 }

@@ -1,18 +1,23 @@
 /* share.test.ts — the text, which is the half with a right answer. */
 
 import { describe, it, expect } from 'vitest';
-import { SITE, shareText } from './share.ts';
+import { shareText } from './share.ts';
 
 const base = { day: '2026-09-19', game: 'Merge', setting: 'Easy', par: 6, moves: [1, 0, 2, 3, 4, 5], hints: 0 };
 
 describe('the shared daily', () => {
-  it('is four lines: what, how, the moves, and where', () => {
+  it('is three lines: what, how, and the moves', () => {
     const lines = shareText(base).split('\n');
-    expect(lines).toHaveLength(4);
+    expect(lines).toHaveLength(3);
     expect(lines[0]).toBe('Color Flood · 2026-09-19');
     expect(lines[1]).toBe('Merge · Easy · 6 moves · par!');
     expect(lines[2]).toBe('🟦🟥🟨🟩🟪🟧');
-    expect(lines[3]).toBe(SITE);
+  });
+
+  it('points nowhere', () => {
+    /* No URL, no host, nothing that looks like one. The GitHub Pages build is
+       where the game is developed, not where anybody should be sent. */
+    expect(shareText(base)).not.toMatch(/https?:|github|\.io|\.com/i);
   });
 
   it('says par only when it was par', () => {

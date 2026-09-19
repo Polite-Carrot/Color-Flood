@@ -775,7 +775,7 @@ from, and `git push` is the deploy.
 | `src/palette.ts` | What a color index looks like. The generator never sees it. |
 | `src/app.ts` | The browser build. |
 | `src/sound.ts` | The blips. With `app.ts`, the only files in `src/` that know a DOM exists. |
-| `src/share.ts` | A finished daily, as four lines you can paste. Pure, so it has a test. |
+| `src/share.ts` | A finished daily, as three lines you can paste. Pure, so it has a test. |
 | `src/ads.ts` | When an interstitial is allowed to appear, and the AdMob call that shows it. A no-op off a phone. |
 | `src/track.ts` | Consented analytics: GA4 on the web, Firebase on a phone. Inert until somebody says yes. |
 | `src/cli.ts` | Deals a board and prints it to a terminal. |
@@ -828,13 +828,18 @@ have done better at, and a random board is nobody else's.
 Color Flood · 2026-09-19
 Merge · Extra Hard · 12 moves · par! · 1 hint
 🟩🟦🟨🟥🟪🟧🟨🟧🟥🟪🟦🟩
-polite-carrot.github.io/Color-Flood
 ```
 
 The squares are the moves played, in order, and they are the whole point:
 they say how the board fell without giving away anything about the board, so
 whoever reads it has the same puzzle ahead of them. A test holds that line —
 one square per move and nothing else.
+
+There is no fourth line pointing anywhere. There was, and it pointed at the
+GitHub Pages build, which is where the game is developed rather than where
+anybody should be sent. When there is a store listing to name it goes back as
+one more entry in the array, and a test asserts that nothing URL-shaped is in
+there in the meantime.
 
 `navigator.share` where it exists, which on iOS is the sheet every other app
 uses; the clipboard where it does not, which is every Android web view.
