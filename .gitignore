@@ -5,3 +5,6 @@ www/
 # Firebase, per app and downloaded from the console — see README.
 google-services.json
 GoogleService-Info.plist
+
+# Gradle output from the in-repo Unity Ads plugin, made on every Android build.
+plugins/unity-ads/android/build/

@@ -873,8 +873,8 @@ function wire() {
         applyConsent();
         closeOverlay('overlay-privacy');
         /* The first Save is what releases the ad stack: the card closes, and then
-           Google's consent form and iOS's tracking prompt come up against the
-           answers just given rather than in front of the question. Reopening the
+           iOS's tracking prompt comes up after the question rather than in front
+           of it. Reopening the
            sheet later from Settings changes the answers, and applyConsent above
            has already carried them — there is nothing left to start. */
         if (first)
@@ -1187,8 +1187,7 @@ function applyConsent() {
         void Track.stop();
 }
 /* What the tracking prompt came back with. On Android the plugin always says
-   authorized, which is right: there is no ATT there, and what governs
-   personalisation is the consent form instead. */
+   authorized, which is right: there is no ATT there to have said otherwise. */
 Ads.settle = (authorised) => {
     if (saved.ads === authorised)
         return;
@@ -1238,18 +1237,17 @@ Haptics.on = saved.buzz;
 wire();
 paintRandomScreen();
 paintHome();
-/* Native only, and deliberately at boot: the GDPR form and iOS's tracking
-   prompt land while the player is still looking at the home screen, and the
-   first interstitial is warm long before anything is allowed to show it. */
+/* Carries the saved answers into analytics and the ad flags before anything
+   else can ask for either. */
 applyConsent();
 /* Order matters, and it is the whole point of this pair.
    
-   Ads.start() is what puts Google's consent form and then iOS's tracking
-   prompt on screen. Starting it at boot raced the sheet below: both went up
-   at once and the system prompt landed ON TOP of the question that was meant
-   to explain it. So nothing starts until there is an answer — the sheet
-   first, then Save, then the system prompts, which is also the order Apple
-   asks for a pre-prompt to come in.
+   Ads.start() is what puts iOS's tracking prompt on screen. Starting it at
+   boot raced the sheet below: both went up at once and the system prompt
+   landed ON TOP of the question that was meant to explain it. So nothing
+   starts until there is an answer — the sheet first, then Continue, then the
+   system prompt, which is also the order Apple asks for a pre-prompt to come
+   in. It is also why Ads.start() is the only thing that can start the ad SDK.
    
    A returning player has answered already, so for them this is the boot it
    always was. */

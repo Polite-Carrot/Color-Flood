@@ -1,0 +1,25 @@
+{
+  "name": "color-flood-unity-ads",
+  "version": "1.0.0",
+  "description": "Unity Ads for Color Flood: one interstitial, one bottom banner, consent flags and the iOS tracking prompt.",
+  "private": true,
+  "license": "UNLICENSED",
+  "author": "Polite Carrot",
+  "files": [
+    "android/src/main/",
+    "android/build.gradle",
+    "ios/Sources",
+    "ColorFloodUnityAds.podspec"
+  ],
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=7.0.0"
+  }
+}

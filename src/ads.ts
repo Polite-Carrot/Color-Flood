@@ -1,4 +1,5 @@
-/* ads.ts — the interstitial, and the rule about when it is allowed to appear.
+/* ads.ts — the interstitial and the home-screen banner, and the rule about
+ * when the interstitial is allowed to appear. Served by Unity Ads.
  *
  * Ported from the sort game's ads.js. The cap is the same one, deliberately
  * gentle for a puzzle game: ONE interstitial fires when BOTH of these have
@@ -49,39 +50,42 @@ export class Gate {
   shown(now: number): void { this.since = now; this.levels = 0; }
 }
 
-/* ─── the plugin ─── */
+/* ─── the plugin ───
+   Unity Ads, through the small plugin that lives in this repository at
+   plugins/unity-ads (installed as a file: dependency, so `cap sync` wires it
+   into both native projects like any other). Nothing off the shelf did both a
+   banner and the privacy flags, which is why it is ours. */
 
-/* Google's official test units. These are what is committed, on purpose: a
-   real ad unit ID in a public repository is an invitation to have somebody
-   else's traffic charged against the account, and a build that accidentally
-   ships with test IDs shows test creatives, while a build that accidentally
-   ships with real ones during development racks up invalid clicks.
-   
-   To ship for real, put the Color Flood units from the AdMob console here —
-   and the matching app IDs in android/app/src/main/AndroidManifest.xml and
-   ios/App/App/Info.plist, which carry test values for the same reason. */
-const INTERSTITIAL = {
-  android: 'ca-app-pub-3940256099942544/1033173712',
-  ios: 'ca-app-pub-3940256099942544/4411468910',
-};
-const BANNER = {
-  android: 'ca-app-pub-3940256099942544/6300978111',
-  ios: 'ca-app-pub-3940256099942544/2934735716',
+/* The Game IDs from the Unity dashboard, one per store — Monetization, the
+   project's settings. Empty means that platform never asks for an ad: the
+   module stays exactly as inert as it is on the web. They are not secrets;
+   every shipped build carries its own in the binary. */
+export const GAME_ID: Record<Platform, string> = {
+  ios: '',
+  android: '',
 };
 
-/* BANNER is the 320x50 one — the small strip, and the size asked for.
-   ADAPTIVE_BANNER is the other sensible choice: it fills the width of the
-   phone rather than sitting in a 320px box with a gap either side on anything
-   wider, and is a little taller for it. Swapping this one word is the whole
-   difference. */
-const BANNER_SIZE = 'BANNER';
+/* The ad units a new Unity project is created with. If they are renamed in
+   the dashboard, rename them here to match — Unity answers an unknown one
+   with a load error and nothing else. */
+export const PLACEMENT: Record<'interstitial' | 'banner', Record<Platform, string>> = {
+  interstitial: { ios: 'Interstitial_iOS', android: 'Interstitial_Android' },
+  banner: { ios: 'Banner_iOS', android: 'Banner_Android' },
+};
 
-/* The banner is drawn NATIVELY, as a subview over the web view — on both
-   platforms, checked in the plugin's own source. It does not resize the page
-   underneath it, so nothing reserves that strip unless we do: the height the
-   plugin reports goes into --ad-h, the app's bottom padding is written in
-   terms of it, and the board re-measures. Without that the banner sits on top
-   of the color swatches. */
+/* Unity has no test IDs the way Google does: test mode is a flag sent with
+   the real Game ID, and Unity serves its own test creatives while it is on —
+   nothing is earned and nothing a developer taps counts against the account.
+   It stays true in every commit until the one that makes the store build,
+   and goes back straight after. The dashboard can also force it per
+   platform, which is the safer switch if it is ever in doubt. */
+export const TEST_MODE = true;
+
+/* The banner is drawn NATIVELY, as a view over the web view, on both
+   platforms. It does not resize the page underneath it, so nothing reserves
+   that strip unless we do: the height the plugin reports goes into --ad-h,
+   the app's bottom padding is written in terms of it, and the board
+   re-measures. Without that the banner sits on top of the color swatches. */
 const AD_HEIGHT = '--ad-h';
 
 /* The one screen the banner is allowed on. A board is a thing somebody is
@@ -99,156 +103,172 @@ function reserve(px: number): void {
   window.dispatchEvent(new Event('resize'));
 }
 
-/* Anything under Google's test publisher gets isTesting on every request.
-   The flag is not decoration: the plugin swaps in its own test unit when it
-   is set and the device is not a registered test device, so a build cannot
-   count a developer's own taps against a real account. Real units skip the
-   flag and get real fills. Derived rather than configured, so the ID and the
-   flag can never disagree with each other. */
-const TEST_PUBLISHER = 'ca-app-pub-3940256099942544';
-const isTestUnit = (id: string): boolean => id.startsWith(TEST_PUBLISHER);
-
-/* UMP decides whether the GDPR form is needed from the device's real
-   location. To see the form somewhere it is not required, this overrides the
-   lookup: 1 makes the device look like it is in the EEA, 3 like a regulated
-   US state, 0 turns the override off. A NUMBER, not a name — the plugin took
-   strings at v8, which is what the sort game is on, and this is v7. Null in
-   anything shipped. */
-const DEBUG_GEOGRAPHY: number | null = null;
+type Platform = 'ios' | 'android';
 
 type Plugin = {
-  initialize(o: unknown): Promise<unknown>;
-  showBanner(o: unknown): Promise<unknown>;
-  hideBanner(): Promise<unknown>;
-  resumeBanner(): Promise<unknown>;
-  removeBanner(): Promise<unknown>;
-  addListener(event: string, fn: (info: { height?: number }) => void): Promise<unknown>;
-  requestConsentInfo(o: unknown): Promise<{ status?: string; isConsentFormAvailable?: boolean }>;
-  showConsentForm(): Promise<unknown>;
-  trackingAuthorizationStatus(): Promise<{ status?: string }>;
-  requestTrackingAuthorization(): Promise<unknown>;
-  prepareInterstitial(o: unknown): Promise<unknown>;
+  initialize(o: { gameId: string; testMode: boolean }): Promise<unknown>;
+  setConsent(o: { consent?: boolean; optOut?: boolean }): Promise<unknown>;
+  loadInterstitial(o: { placementId: string }): Promise<unknown>;
   showInterstitial(): Promise<unknown>;
+  showBanner(o: { placementId: string }): Promise<unknown>;
+  hideBanner(): Promise<unknown>;
+  trackingStatus(): Promise<{ status?: string }>;
+  requestTracking(): Promise<{ status?: string }>;
+  addListener(event: string, fn: (info: { height?: number }) => void): Promise<unknown>;
 };
 
 type Cap = {
   isNativePlatform?: () => boolean;
   getPlatform?: () => string;
   registerPlugin?: (name: string) => Plugin;
-  Plugins?: { AdMob?: Plugin };
+  Plugins?: { UnityAds?: Plugin };
 };
 
 const cap = (): Cap | null =>
   (typeof window === 'undefined' ? null : ((window as unknown as { Capacitor?: Cap }).Capacitor ?? null));
+
+const platform = (): Platform => {
+  const c = cap();
+  return (c && c.getPlatform && c.getPlatform()) === 'ios' ? 'ios' : 'android';
+};
 
 export const Ads = {
   gate: new Gate(Date.now()),
   plugin: null as Plugin | null,
   ready: false,
   starting: null as Promise<boolean> | null,
-  unit: '',
-  bannerUnit: '',
-  /* What the tracking prompt said. Personalised until told otherwise, and
-     when it is told otherwise npa goes on every request so Google serves
-     non-personalised ads even where UMP recorded a consent. */
+  /* What the tracking prompt said. Personalised until told otherwise; when
+     told otherwise the player is opted out of Unity's data sharing. */
   personalised: true,
   /* Called with the prompt's answer, so the rest of the app can record it and
      bring its own consent grants into line. Replaced in app.ts; a no-op here
      so ads.ts stays something that can be dropped into anything. */
   settle: ((_authorised: boolean): void => {}) as (authorised: boolean) => void,
   /* An interstitial is loaded and waiting. Cleared by every show — each one
-     has to be prepared again. */
+     has to be loaded again — and by Unity saying a waiting one went stale. */
   loaded: false,
   loading: null as Promise<boolean> | null,
-  /* The banner is created once and then hidden and resumed, rather than being
-     made and destroyed per screen: every showBanner is a fresh ad request,
-     and a request per screen change is both slower to appear and a good way
-     to have Google notice the traffic. */
-  bannerMade: false,
+  /* Whether the screen showing is the banner's screen. The banner loads
+     asynchronously, and one that arrives after the player has already left
+     the home screen must not take the strip from the board. */
+  wantBanner: false,
+  /* Set by start() and nothing else. Until then a screen change only records
+     where the player is: it must never be the thing that starts the SDK, or
+     the tracking prompt could come up in front of the usage-data sheet that
+     is meant to come first. */
+  started: false,
   bannerHeight: 0,
+  reserved: 0,
 
   native(): boolean {
     const c = cap();
     return !!(c && c.isNativePlatform && c.isNativePlatform());
   },
 
+  /* Native AND configured for this platform. Before the Game IDs are filled
+     in, a phone build behaves like the web one: no prompt, no requests. */
+  on(): boolean {
+    return this.native() && GAME_ID[platform()] !== '';
+  },
+
   get(): Plugin | null {
     if (this.plugin) return this.plugin;
     const c = cap();
     if (!c) return null;
-    if (c.registerPlugin) this.plugin = c.registerPlugin('AdMob');
-    else if (c.Plugins && c.Plugins.AdMob) this.plugin = c.Plugins.AdMob;
+    if (c.registerPlugin) this.plugin = c.registerPlugin('UnityAds');
+    else if (c.Plugins && c.Plugins.UnityAds) this.plugin = c.Plugins.UnityAds;
     return this.plugin;
   },
 
   async init(): Promise<boolean> {
-    if (!this.native()) return false;
+    if (!this.on()) return false;
     if (this.ready) return true;
     if (this.starting) return this.starting;
 
-    const admob = this.get();
-    if (!admob) return false;
-    const c = cap()!;
-    const platform = (c.getPlatform && c.getPlatform()) === 'ios' ? 'ios' : 'android';
-    this.unit = INTERSTITIAL[platform];
-    this.bannerUnit = BANNER[platform];
+    const unity = this.get();
+    if (!unity) return false;
 
-    /* Order matters. UMP first, since it works out whether this is a consent
-       jurisdiction and takes the answer; then iOS's tracking prompt; then the
-       SDK, which loads with whatever those two settled and serves
-       personalised or not from that alone. */
+    /* Order matters. The tracking prompt first, since its answer decides
+       whether ads are personalised; then the privacy flags that answer turns
+       into; then the SDK, so the very first request already carries them. */
     this.starting = (async () => {
-      await this.consent(admob);
-      /* Always, and before initialize: the answer it comes back with is what
-         decides whether ads are personalised, so it has to be in before the
-         first ad is requested. */
-      await this.tracking(admob);
-      await admob.initialize({ initializeForTesting: isTestUnit(this.unit) });
+      await this.tracking(unity);
+      await this.sendConsent();
+      await unity.initialize({ gameId: GAME_ID[platform()], testMode: TEST_MODE });
+      await this.listen(unity);
       this.ready = true;
       return true;
-    })().catch(() => false);
+    })().catch(() => {
+      /* Offline at launch, most likely. Let the next call try again rather
+         than leaving the whole session without ads. */
+      this.starting = null;
+      return false;
+    });
     return this.starting;
-  },
-
-  /* Swallowed on purpose, all of it: a consent form that fails is not a
-     reason a puzzle game cannot open. */
-  async consent(admob: Plugin): Promise<void> {
-    try {
-      const info = await admob.requestConsentInfo(DEBUG_GEOGRAPHY ? { debugGeography: DEBUG_GEOGRAPHY } : {});
-      if (info && info.status === 'REQUIRED' && info.isConsentFormAvailable) await admob.showConsentForm();
-    } catch { /* no form published, or the lookup failed — carry on */ }
   },
 
   /* iOS 14.5+ wants an explicit prompt before the IDFA is readable, and that
      prompt IS the personalised-ads question — which is why the answer is read
      back rather than thrown away. Android has no ATT and its half of the
      plugin answers `authorized` unconditionally, which is the right answer
-     there: what governs personalisation on Android is the consent form. */
-  async tracking(admob: Plugin): Promise<void> {
+     there. Swallowed: a prompt that fails is not a reason a puzzle game
+     cannot open. */
+  async tracking(unity: Plugin): Promise<void> {
     try {
-      let t = await admob.trackingAuthorizationStatus();
-      if (t && t.status === 'notDetermined') {
-        await admob.requestTrackingAuthorization();
-        t = await admob.trackingAuthorizationStatus();
-      }
+      let t = await unity.trackingStatus();
+      if (t && t.status === 'notDetermined') t = await unity.requestTracking();
       /* `authorized` is the only yes. Denied, restricted, and a prompt that
          somehow came back still undetermined are all no. */
       const yes = t?.status === 'authorized';
       this.personalised = yes;
       this.settle(yes);
-    } catch { /* not iOS, or an older SDK: leave it as it was */ }
+    } catch { /* leave it as it was */ }
+  },
+
+  /* Unity ships no consent form, so what the game knows goes over as flags.
+       consent — the GDPR one, applied where GDPR is. Always false: nothing in
+         this app asks a GDPR-grade question, and the tracking prompt is not
+         one. Players in the EEA and the UK get non-personalised ads.
+       optOut — the US state-law one. On when the tracking prompt said no. */
+  async sendConsent(): Promise<void> {
+    try {
+      await this.get()!.setConsent({ consent: false, optOut: !this.personalised });
+    } catch { /* keep going; Unity falls back to its own defaults */ }
+  },
+
+  /* Hung once, after initialize. */
+  async listen(unity: Plugin): Promise<void> {
+    await unity.addListener('bannerLoaded', (info) => {
+      this.bannerHeight = typeof info?.height === 'number' ? info.height : 0;
+      if (this.wantBanner) this.hold(this.bannerHeight);
+    });
+    await unity.addListener('bannerFailed', () => {
+      this.bannerHeight = 0;
+      this.hold(0);
+    });
+    await unity.addListener('interstitialExpired', () => {
+      this.loaded = false;
+      if (this.gate.warming()) void this.load();
+    });
+  },
+
+  /* reserve(), but only when the number changes — hiding a banner that was
+     never there should not make the board re-measure on every screen change. */
+  hold(px: number): void {
+    if (px === this.reserved) return;
+    this.reserved = px;
+    reserve(px);
   },
 
   async load(): Promise<boolean> {
+    if (!this.started) return false;
     if (!(await this.init())) return false;
     if (this.loaded) return true;
     if (this.loading) return this.loading;
 
     this.loading = (async () => {
       try {
-        const opts: Record<string, unknown> = { adId: this.unit, isTesting: isTestUnit(this.unit) };
-        if (!this.personalised) opts['npa'] = true;
-        await this.plugin!.prepareInterstitial(opts);
+        await this.plugin!.loadInterstitial({ placementId: PLACEMENT.interstitial[platform()] });
         this.loaded = true;
         return true;
       } catch {
@@ -265,110 +285,89 @@ export const Ads = {
      place the game changes screens, so there is no screen this can be out of
      step with. */
   onScreen(screen: string): void {
-    if (!this.native()) return;
+    if (!this.on()) return;
     void this.banner(screen === BANNER_ON);
   },
 
+  /* The plugin makes the banner once and then hides and shows it, loading a
+     new one only when there is none — a request per screen change would be
+     both slower to appear and a good way to have the traffic noticed. */
   async banner(on: boolean): Promise<void> {
+    this.wantBanner = on;
     if (!on) {
-      if (!this.bannerMade) return;
-      reserve(0);
-      try { await this.plugin!.hideBanner(); } catch { /* nothing to hide */ }
+      this.hold(0);
+      if (this.ready) {
+        try { await this.plugin!.hideBanner(); } catch { /* nothing to hide */ }
+      }
       return;
     }
-    if (this.bannerMade) {
-      try { await this.plugin!.resumeBanner(); } catch { return; }
-      reserve(this.bannerHeight);
-      return;
-    }
-    await this.makeBanner();
-  },
-
-  /* The first show: creates the view, hangs the listeners, and asks for the
-     first ad. Everything after it is hide and resume. */
-  async makeBanner(): Promise<boolean> {
-    if (!(await this.init())) return false;
+    if (!this.started) return;
+    if (!(await this.init())) return;
+    /* The screen may have changed while the SDK was starting. */
+    if (!this.wantBanner) return;
     try {
-      /* The plugin reports the real height once the ad is measured — 50 for
-         a 320x50, more for an adaptive one, and 0 if it never fills. Taking
-         it from the event rather than assuming 50 is what keeps the layout
-         right for either size, and what puts the space back when there is no
-         ad to show. */
-      await this.plugin!.addListener('bannerAdSizeChanged', (info) => {
-        this.bannerHeight = typeof info?.height === 'number' ? info.height : 0;
-        reserve(this.bannerHeight);
-      });
-      await this.plugin!.addListener('bannerAdFailedToLoad', () => {
-        this.bannerHeight = 0;
-        reserve(0);
-      });
-
-      const opts: Record<string, unknown> = {
-        adId: this.bannerUnit,
-        adSize: BANNER_SIZE,
-        position: 'BOTTOM_CENTER',
-        margin: 0,
-        isTesting: isTestUnit(this.bannerUnit),
-      };
-      if (!this.personalised) opts['npa'] = true;
-      await this.plugin!.showBanner(opts);
-      this.bannerMade = true;
-      return true;
+      /* The space is reserved when the plugin says an ad is actually there —
+         the bannerLoaded listener — not here, so no fill means no gap. */
+      await this.plugin!.showBanner({ placementId: PLACEMENT.banner[platform()] });
     } catch {
-      reserve(0);
-      return false;
+      this.hold(0);
     }
   },
 
   /* Called once per puzzle finished. */
   noteWin(): void {
-    if (!this.native()) return;
+    if (!this.on()) return;
     this.gate.note();
     if (this.gate.warming() && !this.loaded && !this.loading) void this.load();
   },
 
   /* Called where the game is about to leave a finished board — the win card's
      buttons, all three of them. Returns whether an ad was shown, and always
-     returns a promise so the caller can await it the same way either way. */
+     returns a promise so the caller can await it the same way either way.
+     The plugin resolves only once the ad has been dismissed. */
   async maybeShow(): Promise<boolean> {
-    if (!this.native()) return false;
+    if (!this.on()) return false;
     if (!this.gate.due(Date.now())) return false;
     if (!this.loaded && !(await this.load())) return false;
 
     try {
+      this.loaded = false;
       await this.plugin!.showInterstitial();
       this.gate.shown(Date.now());
-      this.loaded = false;
       /* Line the next one up now, so the next threshold is not spent waiting
          on a network call. */
       void this.load();
       return true;
     } catch {
-      this.loaded = false;
       return false;
     }
   },
 
-  /* Any ad already warmed was requested under the old setting, so it goes and
-     a fresh one is warmed under the new one. */
+  /* The flags go again, and any ad already warmed was requested under the old
+     setting, so a fresh one is loaded in its place. */
   setPersonalised(on: boolean): void {
     if (this.personalised === on) return;
     this.personalised = on;
-    if (!this.native()) return;
-    this.loaded = false;
-    void this.load();
+    if (!this.ready) return;
+    void this.sendConsent().then(() => {
+      this.loaded = false;
+      void this.load();
+    });
   },
 
-  /* Initialise at boot rather than mid-play, so the consent form and the iOS
-     tracking prompt happen while the player is still on the home screen, and
-     the first interstitial is warm long before the third win. */
+  /* Initialise at boot rather than mid-play, so the iOS tracking prompt
+     happens while the player is still on the home screen, and the first
+     interstitial is warm long before the second win. */
   start(): void {
     if (preview()) return;
-    if (!this.native()) return;
+    if (!this.on() || this.started) return;
+    this.started = true;
     void this.init().then((ok) => {
       if (!ok) return;
-      /* The home screen is the one showing at boot. */
-      void this.banner(true);
+      /* Asked of the page rather than remembered: at boot the home screen is
+         shown without going through onScreen at all. */
+      const active = document.querySelector('.screen.is-active');
+      void this.banner(!!active && active.id === BANNER_ON);
       void this.load();
     });
   },
@@ -383,7 +382,7 @@ export const Ads = {
    So: ?ads=preview draws an EMPTY BOX of exactly the size the real banner
    would take, reserves the same space, and says on its face that it is a
    placeholder. It is off unless the flag is in the URL, it is never an ad,
-   and it never asks Google for anything. */
+   and it never asks Unity for anything. */
 function preview(): boolean {
   if (typeof window === 'undefined') return false;
   return new URLSearchParams(window.location.search).get('ads') === 'preview';

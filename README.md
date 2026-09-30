@@ -442,8 +442,44 @@ the app.
 
 ### Ads
 
-Two formats, through `@capacitor-community/admob`: a **banner** along the
-bottom, and an **interstitial** on the same cadence as the sort game.
+Two formats, through **Unity Ads**: a **banner** along the bottom, and an
+**interstitial** on the same cadence as the sort game.
+
+#### The plugin
+
+No published Capacitor plugin did both a Unity banner and the privacy flags,
+so this one is ours and lives in the repository at `plugins/unity-ads`. It is
+installed as a `file:` dependency (`color-flood-unity-ads`), which is what
+lets `cap sync` wire it into both native projects exactly like any other
+plugin — no hand edits to the Xcode project or to `MainActivity`.
+
+```
+plugins/unity-ads/
+  package.json                     the capacitor block cap sync reads
+  ColorFloodUnityAds.podspec       iOS: UnityAds 4.20.1, pinned
+  android/build.gradle             Android: com.unity3d.ads:unity-ads:4.20.1, pinned
+  android/src/main/java/.../UnityAdsPlugin.java
+  ios/Sources/UnityAdsPlugin/UnityAdsPlugin.swift
+```
+
+Both halves use the ad-object API Unity introduced in 4.x —
+`InterstitialAd`/`UADSInterstitialAd`, `BannerAd`/`UADSBannerAd` and their
+configuration builders. The older `UnityAds.load`/`show` and `BannerView`
+calls are deprecated as of 4.20 and marked for removal. The SDK is pinned to
+the exact version on both platforms: an ad SDK that moves between two builds is
+a bug report you cannot reproduce.
+
+The JavaScript side is `src/ads.ts`, reached through
+`Capacitor.registerPlugin('UnityAds')` for the same no-bundler reason as the
+other plugins. Every plugin call resolves when Unity says it is done rather
+than when it is issued — `showInterstitial` resolves when the ad is
+*dismissed* — so the game can await it before moving on.
+
+**Checked so far:** the Android half compiles against the real Unity 4.20.1
+and Capacitor 7.6.9 jars, with no deprecation warnings. The iOS half is
+written against the exact signatures in Unity 4.20.1's `.swiftinterface`, but
+has not been compiled — that needs Xcode. If `pod install` or the build
+complains, the plugin is the first place to look.
 
 #### The banner
 
@@ -453,22 +489,23 @@ puzzle screen is also the one screen where the strip costs something: measured
 below, it took an Extra Hard board on a 375px phone from 23.6px a cell down to
 19.6px. The menu has height going spare and nothing to concentrate on.
 
-The banner is created once and then hidden and resumed as the screen changes,
-rather than made and destroyed each time: every `showBanner` is a fresh ad
-request, and one per screen change would be both slower to appear and a good
-way to have Google notice the traffic. It is switched from `show()` — the one
+The banner slot is created once and then hidden and shown as the screen
+changes, and a new banner is loaded only when there is none: a request per
+screen change would be both slower to appear and a good way to have the
+traffic noticed. A banner Unity says has expired is replaced in place while
+the slot is showing. It is switched from `show()` — the one
 function the game changes screens through — so there is no route to a board
 that can leave it behind.
 
-It is drawn **natively, as a subview over the web view**, on both platforms —
-that is the plugin's own source, not a guess. It does not resize the page
-underneath it, so nothing reserves that strip unless the page does: the height
-the plugin reports in `bannerAdSizeChanged` goes into a `--ad-h` custom
+It is drawn **natively, as a view over the web view**, on both platforms,
+above the home indicator and the Android navigation bar. It does not resize
+the page underneath it, so nothing reserves that strip unless the page does:
+the height the plugin reports in `bannerLoaded` goes into a `--ad-h` custom
 property, `.app`'s bottom padding is written in terms of it, and the board
 re-measures. Without that the banner would sit on top of the color swatches.
-The height comes from the event rather than being assumed to be 50, so an
-adaptive banner would fit too — and a banner that never fills puts the space
-back.
+The space is reserved only once an ad has actually arrived, so a banner that
+never fills leaves no gap — and one that arrives after the player has left
+the home screen reserves nothing.
 
 What it would cost on the puzzle screen — which is why it is not there —
 measured on the Extra Hard 14×14:
@@ -483,16 +520,13 @@ the screen, not its height, so the strip comes out of space the board was not
 using. The SE pays a whole cell size. As shipped, every puzzle screen is
 exactly the size it was before the banner existed.
 
-`ADAPTIVE_BANNER` is the other sensible size — full width instead of a 320px
-box with a gap either side, and a little taller for it. One word in `ads.ts`.
-
 **Seeing it without a phone.** The banner is native, so github.io cannot show
 one, and "does the layout still work with a banner in it" would otherwise need
 a TestFlight build to answer. So `?ads=preview` draws an empty box of exactly
 the size and in exactly the position the real banner lands, reserves the same
 space on the same screen the real one appears on, and says on its face that it
 is a placeholder. Off unless the flag is in the URL, never an ad, and it never
-asks Google for anything:
+asks Unity for anything:
 
 ```
 https://polite-carrot.github.io/Color-Flood/?ads=preview
@@ -515,9 +549,9 @@ not do.
 system's, is two chances to disagree with ourselves — so `saved.ads` is not
 something the sheet writes, it is what the prompt answered, and it stays null
 until it has. `authorized` is the only yes; denied, restricted and a prompt
-that somehow returns undetermined are all no, and a no puts `npa` on every ad
-request. On Android the plugin answers `authorized` unconditionally, which is
-right there: what governs personalisation on Android is the consent form.
+that somehow returns undetermined are all no, and a no opts the player out of
+Unity's data sharing (below). On Android the plugin answers `authorized`
+unconditionally, which is right there: there is no ATT to have said otherwise.
 
 **It comes first, and nothing else starts until it is answered.** The order on
 a first launch is:
@@ -525,8 +559,8 @@ a first launch is:
 ```
 1  Your choices          send usage data? — off by default
 2  Continue
-3  Google's UMP form     where GDPR requires one and a message is published
-4  iOS tracking prompt   allow tracking for personalised ads?
+3  iOS tracking prompt   allow tracking for personalised ads?
+4  the privacy flags, then Unity initialises
 5  the banner, and the first interstitial warming
 ```
 
@@ -535,15 +569,35 @@ it is the way into the game and the system prompts follow it. Reopened from
 Settings it says **Save**, because then it is the way back out and nothing
 follows.
 
-`Ads.start()` is what puts 3 and 4 on screen, so it is held back until that
-first Continue.
+`Ads.start()` is what puts 3 on screen, so it is held back until that first
+Continue — and it is the only thing that can start the ad SDK; a screen change
+before it only records where the player is.
 Called at boot it raced the sheet: both went up at once and the system prompt
 landed on top of the question that was meant to explain it. This is also the
 order Apple asks a pre-prompt to come in. A returning player has answered, so
 for them the stack starts at boot as it always did.
 
-Step 4 runs before `initialize`, because its answer is what decides whether
+Step 3 runs before `initialize`, because its answer is what decides whether
 the first ad request is personalised.
+
+**Until the Game IDs are filled in, none of 3–5 happens** — a phone build
+with an empty `GAME_ID` behaves like the web one: no tracking prompt, no ad
+requests. There is nothing to ask permission to track for.
+
+**Unity has no consent form**, unlike Google's UMP, which went with AdMob.
+It takes the answers as two flags instead, sent before `initialize` and again
+whenever the answer changes:
+
+| Flag | Applies to | Sent as |
+|------|------------|---------|
+| `setUserConsent` | players Unity places in the EEA and the UK (GDPR) | always **false** |
+| `setUserOptOut` | US state privacy laws ("do not sell or share") | **true** when the tracking prompt said no |
+
+GDPR consent is always false because nothing in this app asks a GDPR-grade
+question, and the tracking prompt is not one. The effect is that players in
+the EEA and the UK get non-personalised ads, which is compliant but earns
+less there. Personalised ads in those regions would need a proper consent
+management platform (a TCF-registered CMP) in front of the game.
 
 The answers live in the save as `ads` and `stats`, and **null is a third
 state**: "off because they said no" and "off because nobody has asked" want
@@ -642,36 +696,28 @@ both counters so a second cannot follow it immediately. The threshold itself
 is asserted, so changing the cadence is a deliberate edit rather than a
 drift.
 
-**The IDs committed here are Google's official test units, on purpose.** A
-real `ca-app-pub-…` unit in a public repository is an invitation to have
-somebody else's traffic charged against the account, and a device on test IDs
-shows test creatives instead of counting a developer's own taps as real
-clicks. `isTesting` is *derived* from the ID rather than configured
-separately, so the two can never disagree: put a real unit in and test mode
-turns itself off.
+**Unity has no test IDs.** Test mode is a flag sent alongside the real Game
+ID, and while it is on Unity serves its own test creatives: nothing is earned,
+and nothing a developer taps counts against the account. `TEST_MODE` in
+`src/ads.ts` is **true** in every commit until the one that makes the store
+build. The Unity dashboard can also force test mode per platform, which is
+the safer switch if it is ever in doubt.
 
-To ship for real, three files:
+Setting it up, in `src/ads.ts`:
 
-| File | What to change |
-|------|----------------|
-| `src/ads.ts` | `INTERSTITIAL` and `BANNER` — the Android and iOS **ad unit** IDs |
-| `src/track.ts` | `MEASUREMENT_ID` — the GA4 **web** stream id, for the web build only |
-| `android/app/src/main/AndroidManifest.xml` | `com.google.android.gms.ads.APPLICATION_ID` — the **app** ID |
-| `ios/App/App/Info.plist` | `GADApplicationIdentifier` — the **app** ID |
+| Constant | What goes in it |
+|----------|-----------------|
+| `GAME_ID` | the iOS and Android **Game IDs** from the Unity dashboard — empty means inert |
+| `PLACEMENT` | the ad unit IDs — Unity's defaults (`Interstitial_iOS`, `Banner_Android`, …) unless renamed |
+| `TEST_MODE` | `true` for development and TestFlight, `false` for the store build |
 
-Two things differ from the sort game, both because this is the plugin's v7
-line (Capacitor 7) and that is v8: the UMP debug-geography override takes a
-number here rather than a name, and `initializeForTesting` only registers the
-devices listed beside it — what actually forces test creatives is the test ad
-unit, and `isTesting`, which makes the plugin substitute its own test unit on
-any device not registered as a test device.
+And for the web build only, `MEASUREMENT_ID` in `src/track.ts` — the GA4
+**web** stream id. There are no ad IDs in the Android manifest or the iOS
+plist any more: Unity reads everything from `initialize`.
 
-Consent is handled before anything is requested: Google's UMP form where GDPR
-or an equivalent state law requires one, then iOS's App Tracking Transparency
-prompt, then the SDK — in that order, at boot, so both land while the player
-is still on the home screen rather than mid-puzzle. Every one of those calls
-is wrapped: a consent form that fails is not a reason a puzzle game cannot
-open.
+Every call in the ad path is wrapped: a prompt or an SDK that fails is not a
+reason a puzzle game cannot open. An `initialize` that fails (offline at
+launch, most likely) is tried again the next time an ad is wanted.
 
 None of this runs on the web. `github.io` serves the same `js/ads.js`, finds
 no `window.Capacitor`, and never asks for an ad — which is also what lets the
@@ -777,7 +823,8 @@ from, and `git push` is the deploy.
 | `src/sound.ts` | The blips. With `app.ts`, the only files in `src/` that know a DOM exists. |
 | `src/share.ts` | A finished daily, as three lines you can paste. Pure, so it has a test. |
 | `src/haptics.ts` | The taps you feel. The same three moments the sound marks, native only. |
-| `src/ads.ts` | When an interstitial is allowed to appear, and the AdMob call that shows it. A no-op off a phone. |
+| `src/ads.ts` | When an interstitial is allowed to appear, the home-screen banner, and the Unity calls behind both. A no-op off a phone. |
+| `plugins/unity-ads/` | The Capacitor plugin for Unity Ads — Java for Android, Swift for iOS. |
 | `src/track.ts` | Consented analytics: GA4 on the web, Firebase on a phone. Inert until somebody says yes. |
 | `src/cli.ts` | Deals a board and prints it to a terminal. |
 
