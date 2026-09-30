@@ -611,9 +611,9 @@ google-services plugin only if the JSON is there.
 One fires when **both** of these have happened since the last one:
 
 - at least **two minutes** of wall-clock time, **and**
-- at least **two puzzles finished**.
+- at least **three puzzles finished**.
 
-Whichever comes last, not whichever comes first. Two levels inside ninety
+Whichever comes last, not whichever comes first. Three levels inside ninety
 seconds does not fire; two minutes spent reading the level grid does not fire.
 Only both together do.
 
@@ -642,7 +642,24 @@ test. `src/ads.test.ts` checks both halves of the "and" — fast wins do not
 fire, a long idle with no wins does not fire — and that showing one restarts
 both counters so a second cannot follow it immediately. The threshold itself
 is asserted, so changing the cadence is a deliberate edit rather than a
-drift.
+drift. It is one number for iOS and Android alike.
+
+**Nothing about an ad can hold up the game.** Three fail-safes, all in
+`maybeShow`, and all tested against a stand-in plugin on a fake clock:
+
+| If… | Then |
+|-----|------|
+| no ad is loaded yet when one is due | it is **skipped at once** — the next puzzle opens without waiting, and a load starts for the next seam |
+| the ad has not appeared within **5 seconds** | the game gives up on it and carries on; the count is not reset, so the next seam tries again |
+| the ad appeared but never reports being closed | the game carries on after **2 minutes** — far longer than any real ad, a backstop against a lost callback |
+| loading or showing fails outright | nothing is shown and the game carries on |
+
+The native plugin sends `interstitialStarted` the moment an ad is on screen,
+which is what tells the first two cases apart. An ad counts as seen from that
+moment, so one that is up but never reports closing still restarts the
+clock. The one thing the game cannot do is cancel an ad that turns up after
+it has been given up on — if that ever happens it appears over the next
+puzzle, which waits underneath until it is closed.
 
 **Unity has no test IDs.** Test mode is a flag sent alongside the real Game
 ID, and while it is on Unity serves its own test creatives: nothing is earned,

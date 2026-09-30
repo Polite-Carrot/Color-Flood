@@ -137,8 +137,11 @@ public class UnityAdsPlugin extends Plugin {
                 activity,
                 new ShowConfiguration.Builder().build(),
                 new InterstitialShowListener() {
+                    /** The ad is on screen. src/ads.ts gives up on one that has not got this far within a few seconds. */
                     @Override
-                    public void onStarted(InterstitialAd shown) {}
+                    public void onStarted(InterstitialAd shown) {
+                        notifyListeners("interstitialStarted", new JSObject());
+                    }
 
                     @Override
                     public void onClicked(InterstitialAd shown) {}

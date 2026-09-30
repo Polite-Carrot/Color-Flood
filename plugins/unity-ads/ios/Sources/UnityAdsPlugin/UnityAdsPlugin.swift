@@ -157,7 +157,11 @@ public class UnityAdsPlugin: CAPPlugin, CAPBridgedPlugin {
 }
 
 extension UnityAdsPlugin: UADSInterstitialShowDelegate {
-    public func showDidStart(_ unityAd: UADSInterstitialAd) {}
+    /// The ad is on screen. src/ads.ts gives up on one that has not got
+    /// this far within a few seconds, so the game is never held up by it.
+    public func showDidStart(_ unityAd: UADSInterstitialAd) {
+        DispatchQueue.main.async { self.notifyListeners("interstitialStarted", data: [:]) }
+    }
 
     public func showDidClick(_ unityAd: UADSInterstitialAd) {}
 

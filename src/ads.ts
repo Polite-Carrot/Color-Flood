@@ -7,9 +7,9 @@
  * happened since the last one shown —
  *
  *   - at least two minutes of wall-clock time, AND
- *   - at least two puzzles finished.
+ *   - at least three puzzles finished.
  *
- * Whichever comes last, not whichever comes first. Two levels inside ninety
+ * Whichever comes last, not whichever comes first. Three levels inside ninety
  * seconds does not fire. Two minutes spent reading the level grid does not
  * fire. Only both together do, and only at a seam between puzzles — never
  * over a board being played.
@@ -27,7 +27,7 @@
    having a test for — none of which is true of the plugin plumbing. */
 
 export const MIN_MS = 2 * 60 * 1000;
-export const MIN_LEVELS = 2;
+export const MIN_LEVELS = 3;
 
 export class Gate {
   since: number;
@@ -82,6 +82,23 @@ export const PLACEMENT: Record<Platform, string> = {
    platform, which is the safer switch if it is ever in doubt. */
 export const TEST_MODE = true;
 
+/* The fail-safes. Nothing about an ad is allowed to hold up the game:
+   
+   - An ad that is not already loaded when one is due is SKIPPED, never waited
+     for. The player taps Next and gets the next puzzle at once; a load is
+     started so there is one ready at the next seam.
+   - An ad that has not appeared on screen within SHOW_TIMEOUT_MS of being
+     asked for is given up on, and the game carries on.
+   - An ad that did appear but never reports being closed is let go after
+     CLOSE_TIMEOUT_MS. It is a backstop against the SDK losing a callback,
+     set well past the length of any real ad, so the game can never be stuck
+     behind a win card that has already gone. */
+export const SHOW_TIMEOUT_MS = 5 * 1000;
+export const CLOSE_TIMEOUT_MS = 2 * 60 * 1000;
+
+const after = <T>(ms: number, value: T): Promise<T> =>
+  new Promise((resolve) => setTimeout(() => resolve(value), ms));
+
 type Platform = 'ios' | 'android';
 
 type Plugin = {
@@ -125,6 +142,9 @@ export const Ads = {
      has to be loaded again — and by Unity saying a waiting one went stale. */
   loaded: false,
   loading: null as Promise<boolean> | null,
+  /* Resolved by the plugin's interstitialStarted event — the ad is actually
+     on screen. Set up fresh for each show. */
+  appeared: null as (() => void) | null,
   /* Set by start() and nothing else. Nothing else may start the SDK, or the
      tracking prompt could come up in front of the usage-data sheet that is
      meant to come first. */
@@ -212,6 +232,9 @@ export const Ads = {
       this.loaded = false;
       if (this.gate.warming()) void this.load();
     });
+    await unity.addListener('interstitialStarted', () => {
+      if (this.appeared) this.appeared();
+    });
   },
 
   async load(): Promise<boolean> {
@@ -245,22 +268,39 @@ export const Ads = {
   /* Called where the game is about to leave a finished board — the win card's
      buttons, all three of them. Returns whether an ad was shown, and always
      returns a promise so the caller can await it the same way either way.
-     The plugin resolves only once the ad has been dismissed. */
+     However it goes, the promise settles: see the fail-safes above. */
   async maybeShow(): Promise<boolean> {
-    if (!this.on()) return false;
+    if (!this.on() || !this.started) return false;
     if (!this.gate.due(Date.now())) return false;
-    if (!this.loaded && !(await this.load())) return false;
+    if (!this.loaded) {
+      /* Not ready: skip this seam rather than keep the player waiting on the
+         network, and line one up for the next. */
+      if (!this.loading) void this.load();
+      return false;
+    }
+
+    this.loaded = false;
+    const appeared = new Promise<'appeared'>((resolve) => { this.appeared = () => resolve('appeared'); });
+    const closed = this.plugin!.showInterstitial().then(() => 'closed' as const, () => 'failed' as const);
+    /* Whenever an ad does get seen — even one that turns up after the game
+       gave up on it — the clock and the count start again from there. */
+    void closed.then((how) => { if (how === 'closed') this.gate.shown(Date.now()); });
 
     try {
-      this.loaded = false;
-      await this.plugin!.showInterstitial();
-      this.gate.shown(Date.now());
+      const first = await Promise.race([appeared, closed, after(SHOW_TIMEOUT_MS, 'slow' as const)]);
+      if (first !== 'appeared' && first !== 'closed') return false;
+      if (first === 'appeared') {
+        /* Seen, so it counts now — even if the SDK never says it closed. */
+        this.gate.shown(Date.now());
+        const end = await Promise.race([closed, after(CLOSE_TIMEOUT_MS, 'stuck' as const)]);
+        if (end === 'failed') return false;
+      }
+      return true;
+    } finally {
+      this.appeared = null;
       /* Line the next one up now, so the next threshold is not spent waiting
          on a network call. */
       void this.load();
-      return true;
-    } catch {
-      return false;
     }
   },
 
@@ -278,7 +318,7 @@ export const Ads = {
 
   /* Initialise at boot rather than mid-play, so the iOS tracking prompt
      happens while the player is still on the home screen, and the first
-     interstitial is warm long before the second win. */
+     interstitial is warm long before the third win. */
   start(): void {
     if (!this.on() || this.started) return;
     this.started = true;

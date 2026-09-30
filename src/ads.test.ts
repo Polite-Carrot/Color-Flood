@@ -8,8 +8,8 @@
  * only format, and that AdMob is gone. */
 
 import { readFileSync, readdirSync } from 'node:fs';
-import { describe, it, expect } from 'vitest';
-import { Ads, Gate, GAME_ID, MIN_LEVELS, MIN_MS, PLACEMENT } from './ads.ts';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { Ads, CLOSE_TIMEOUT_MS, Gate, GAME_ID, MIN_LEVELS, MIN_MS, PLACEMENT, SHOW_TIMEOUT_MS } from './ads.ts';
 
 const T0 = 1_700_000_000_000; /* any fixed instant; nothing here reads a clock */
 const wins = (gate: Gate, n: number) => { for (let i = 0; i < n; i++) gate.note(); };
@@ -71,7 +71,7 @@ describe('the ad gate', () => {
   });
 
   it('is the cap that was asked for', () => {
-    expect(MIN_LEVELS).toBe(2);
+    expect(MIN_LEVELS).toBe(3);
     expect(MIN_MS).toBe(2 * 60 * 1000);
   });
 });
@@ -134,5 +134,133 @@ describe('ad formats', () => {
         .replace(/\/\/.*$/gm, '');
       expect(code, f).not.toMatch(/banner|rewarded|--ad-h/i);
     }
+  });
+});
+
+describe('the fail-safes', () => {
+  /* A stand-in for the native plugin on an iPhone, so the ad path can be run
+     here with a fake clock: every way an ad can go wrong, and the game must
+     come out the other side of all of them. */
+  type Listener = () => void;
+  let listeners: Record<string, Listener>;
+  let loadAd: () => Promise<unknown>;
+  let showAd: () => Promise<unknown>;
+  const shows = vi.fn();
+
+  const plugin = {
+    initialize: async () => {},
+    setConsent: async () => {},
+    trackingStatus: async () => ({ status: 'authorized' }),
+    requestTracking: async () => ({ status: 'authorized' }),
+    loadInterstitial: () => loadAd(),
+    showInterstitial: () => { shows(); return showAd(); },
+    addListener: async (event: string, fn: Listener) => { listeners[event] = fn; },
+  };
+
+  const never = () => new Promise<unknown>(() => {});
+
+  /* Game running, three puzzles done and two minutes gone: an ad is due. */
+  async function due(): Promise<void> {
+    Ads.start();
+    await vi.advanceTimersByTimeAsync(0);
+    for (let i = 0; i < MIN_LEVELS; i++) Ads.gate.note();
+    vi.setSystemTime(T0 + MIN_MS);
+  }
+
+  /* Whether a promise has settled yet, without waiting on it. */
+  const settled = (p: Promise<unknown>) => {
+    const state = { done: false };
+    void p.then(() => { state.done = true; });
+    return state;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    listeners = {};
+    loadAd = async () => {};
+    showAd = async () => {};
+    shows.mockClear();
+    Object.assign(Ads, {
+      gate: new Gate(T0), plugin: null, ready: false, starting: null, loaded: false,
+      loading: null, started: false, appeared: null, personalised: true,
+    });
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      writable: true,
+      value: { Capacitor: { isNativePlatform: () => true, getPlatform: () => 'ios', registerPlugin: () => plugin } },
+    });
+  });
+
+  afterEach(() => {
+    delete (globalThis as unknown as Record<string, unknown>)['window'];
+    vi.useRealTimers();
+  });
+
+  it('shows an ad that is loaded, and waits for it to be closed', async () => {
+    let close!: () => void;
+    showAd = () => new Promise<void>((resolve) => { close = resolve; });
+    await due();
+    expect(Ads.loaded).toBe(true);
+
+    const p = Ads.maybeShow();
+    const state = settled(p);
+    await vi.advanceTimersByTimeAsync(0);
+    listeners['interstitialStarted']!();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(state.done).toBe(false);          /* the ad is still up */
+    close();
+    await expect(p).resolves.toBe(true);
+    expect(Ads.gate.levels).toBe(0);         /* the count starts again */
+  });
+
+  it('skips the ad, without waiting, when it is still loading', async () => {
+    loadAd = never;                          /* a network that never answers */
+    await due();
+    expect(Ads.loaded).toBe(false);
+    /* Settles with no time passing at all: the player is not kept waiting. */
+    await expect(Ads.maybeShow()).resolves.toBe(false);
+    expect(shows).not.toHaveBeenCalled();
+  });
+
+  it('gives up on an ad that has not appeared within the time limit', async () => {
+    showAd = never;
+    await due();
+    const p = Ads.maybeShow();
+    const state = settled(p);
+    await vi.advanceTimersByTimeAsync(SHOW_TIMEOUT_MS - 1);
+    expect(state.done).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(p).resolves.toBe(false);
+    /* Not counted as seen, so the next seam tries again. */
+    expect(Ads.gate.levels).toBe(MIN_LEVELS);
+  });
+
+  it('carries on when the ad fails to show', async () => {
+    showAd = async () => { throw new Error('show failed'); };
+    await due();
+    await expect(Ads.maybeShow()).resolves.toBe(false);
+  });
+
+  it('lets go of an ad that appeared but never says it closed', async () => {
+    showAd = never;
+    await due();
+    const p = Ads.maybeShow();
+    const state = settled(p);
+    await vi.advanceTimersByTimeAsync(0);
+    listeners['interstitialStarted']!();
+    await vi.advanceTimersByTimeAsync(CLOSE_TIMEOUT_MS - 1);
+    expect(state.done).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(p).resolves.toBe(true);
+    /* It was seen, so it counts, and a second one cannot follow straight on. */
+    expect(Ads.gate.levels).toBe(0);
+  });
+
+  it('shows nothing before the cadence is met', async () => {
+    await due();
+    vi.setSystemTime(T0 + MIN_MS - 1);
+    await expect(Ads.maybeShow()).resolves.toBe(false);
+    expect(shows).not.toHaveBeenCalled();
   });
 });
