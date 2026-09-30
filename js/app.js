@@ -14,7 +14,7 @@ import { MODES, bestStreakOf, dailySeed, dailySetting, dayKey, firstDailyDate, i
 import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from "./campaign.js";
 import { Sound } from "./sound.js";
 import { Haptics } from "./haptics.js";
-import { Ads, adPreviewOnScreen, startAdPreview } from "./ads.js";
+import { Ads } from "./ads.js";
 import { Track } from "./track.js";
 import { shareText } from "./share.js";
 /* ------------------------------------------------------------------ scaffolding */
@@ -28,11 +28,6 @@ function show(screen) {
     for (const s of document.querySelectorAll('.screen'))
         s.classList.remove('is-active');
     $(screen).classList.add('is-active');
-    /* The banner lives on the menu and nowhere else, and this is the only place
-       the game changes screens — so there is no route to a board that can leave
-       it behind. */
-    Ads.onScreen(screen);
-    adPreviewOnScreen(screen);
     if (screen === 'screen-home')
         paintHome();
 }
@@ -1273,8 +1268,3 @@ if (askConsent())
     App.addListener('backButton', () => { if (!goBack())
         void App.exitApp(); });
 })();
-/* Only ever with ?ads=preview in the URL. Draws an empty box the size of the
-   banner so the layout can be looked at without a phone build. The home
-   screen is the one marked active in the HTML, so it starts on. */
-startAdPreview();
-adPreviewOnScreen('screen-home');

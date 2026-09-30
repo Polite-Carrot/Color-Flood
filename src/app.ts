@@ -20,7 +20,7 @@ import {
 import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from './campaign.ts';
 import { Sound } from './sound.ts';
 import { Haptics } from './haptics.ts';
-import { Ads, adPreviewOnScreen, startAdPreview } from './ads.ts';
+import { Ads } from './ads.ts';
 import { Track, type Params } from './track.ts';
 import { shareText } from './share.ts';
 
@@ -35,11 +35,6 @@ const $ = <T extends HTMLElement>(id: string): T => {
 function show(screen: string): void {
   for (const s of document.querySelectorAll('.screen')) s.classList.remove('is-active');
   $(screen).classList.add('is-active');
-  /* The banner lives on the menu and nowhere else, and this is the only place
-     the game changes screens — so there is no route to a board that can leave
-     it behind. */
-  Ads.onScreen(screen);
-  adPreviewOnScreen(screen);
   if (screen === 'screen-home') paintHome();
 }
 
@@ -1352,8 +1347,3 @@ if (askConsent()) Ads.start();
   const App = cap.registerPlugin('App');
   App.addListener('backButton', () => { if (!goBack()) void App.exitApp(); });
 })();
-/* Only ever with ?ads=preview in the URL. Draws an empty box the size of the
-   banner so the layout can be looked at without a phone build. The home
-   screen is the one marked active in the HTML, so it starts on. */
-startAdPreview();
-adPreviewOnScreen('screen-home');

@@ -1,7 +1,7 @@
 {
   "name": "color-flood-unity-ads",
   "version": "1.0.0",
-  "description": "Unity Ads for Color Flood: one interstitial, one bottom banner, consent flags and the iOS tracking prompt.",
+  "description": "Unity Ads for Color Flood: one interstitial, consent flags and the iOS tracking prompt.",
   "private": true,
   "license": "UNLICENSED",
   "author": "Polite Carrot",

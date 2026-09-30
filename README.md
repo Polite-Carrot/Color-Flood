@@ -442,13 +442,13 @@ the app.
 
 ### Ads
 
-Two formats, through **Unity Ads**: a **banner** along the bottom, and an
-**interstitial** on the same cadence as the sort game.
+One format, through **Unity Ads**: an **interstitial** on the same cadence as
+the sort game. There is no banner and no rewarded ad.
 
 #### The plugin
 
-No published Capacitor plugin did both a Unity banner and the privacy flags,
-so this one is ours and lives in the repository at `plugins/unity-ads`. It is
+The published Capacitor plugins for Unity were on old SDKs without the
+privacy flags, so this one is ours and lives in the repository at `plugins/unity-ads`. It is
 installed as a `file:` dependency (`color-flood-unity-ads`), which is what
 lets `cap sync` wire it into both native projects exactly like any other
 plugin — no hand edits to the Xcode project or to `MainActivity`.
@@ -463,9 +463,8 @@ plugins/unity-ads/
 ```
 
 Both halves use the ad-object API Unity introduced in 4.x —
-`InterstitialAd`/`UADSInterstitialAd`, `BannerAd`/`UADSBannerAd` and their
-configuration builders. The older `UnityAds.load`/`show` and `BannerView`
-calls are deprecated as of 4.20 and marked for removal. The SDK is pinned to
+`InterstitialAd`/`UADSInterstitialAd` and their configuration builders. The
+older `UnityAds.load`/`show` calls are deprecated as of 4.20 and marked for removal. The SDK is pinned to
 the exact version on both platforms: an ad SDK that moves between two builds is
 a bug report you cannot reproduce.
 
@@ -480,57 +479,6 @@ and Capacitor 7.6.9 jars, with no deprecation warnings. The iOS half is
 written against the exact signatures in Unity 4.20.1's `.swiftinterface`, but
 has not been compiled — that needs Xcode. If `pod install` or the build
 complains, the plugin is the first place to look.
-
-#### The banner
-
-320×50 — the small MMA strip — centred at the bottom of the **home screen,
-and nowhere else**. A board is a thing somebody is thinking about, and the
-puzzle screen is also the one screen where the strip costs something: measured
-below, it took an Extra Hard board on a 375px phone from 23.6px a cell down to
-19.6px. The menu has height going spare and nothing to concentrate on.
-
-The banner slot is created once and then hidden and shown as the screen
-changes, and a new banner is loaded only when there is none: a request per
-screen change would be both slower to appear and a good way to have the
-traffic noticed. A banner Unity says has expired is replaced in place while
-the slot is showing. It is switched from `show()` — the one
-function the game changes screens through — so there is no route to a board
-that can leave it behind.
-
-It is drawn **natively, as a view over the web view**, on both platforms,
-above the home indicator and the Android navigation bar. It does not resize
-the page underneath it, so nothing reserves that strip unless the page does:
-the height the plugin reports in `bannerLoaded` goes into a `--ad-h` custom
-property, `.app`'s bottom padding is written in terms of it, and the board
-re-measures. Without that the banner would sit on top of the color swatches.
-The space is reserved only once an ad has actually arrived, so a banner that
-never fills leaves no gap — and one that arrives after the player has left
-the home screen reserves nothing.
-
-What it would cost on the puzzle screen — which is why it is not there —
-measured on the Extra Hard 14×14:
-
-| Screen | Without | With |
-|--------|---------|------|
-| 375×667 (iPhone SE 2) | 350px board, 23.6px a cell | 294px, 19.6px a cell |
-| 393×852 (iPhone 15/16 Pro) | 364px, 24.6px a cell | **unchanged** |
-
-Taller phones would pay nothing: the board there is limited by the width of
-the screen, not its height, so the strip comes out of space the board was not
-using. The SE pays a whole cell size. As shipped, every puzzle screen is
-exactly the size it was before the banner existed.
-
-**Seeing it without a phone.** The banner is native, so github.io cannot show
-one, and "does the layout still work with a banner in it" would otherwise need
-a TestFlight build to answer. So `?ads=preview` draws an empty box of exactly
-the size and in exactly the position the real banner lands, reserves the same
-space on the same screen the real one appears on, and says on its face that it
-is a placeholder. Off unless the flag is in the URL, never an ad, and it never
-asks Unity for anything:
-
-```
-https://polite-carrot.github.io/Color-Flood/?ads=preview
-```
 
 ### Analytics
 
@@ -561,7 +509,7 @@ a first launch is:
 2  Continue
 3  iOS tracking prompt   allow tracking for personalised ads?
 4  the privacy flags, then Unity initialises
-5  the banner, and the first interstitial warming
+5  the first interstitial warming
 ```
 
 The button says **Continue** the first time, because that is what it does —
@@ -584,7 +532,7 @@ the first ad request is personalised.
 with an empty `GAME_ID` behaves like the web one: no tracking prompt, no ad
 requests. There is nothing to ask permission to track for.
 
-**Unity has no consent form**, unlike Google's UMP, which went with AdMob.
+**Unity has no consent form.**
 It takes the answers as two flags instead, sent before `initialize` and again
 whenever the answer changes:
 
@@ -708,7 +656,7 @@ Setting it up, in `src/ads.ts`:
 | Constant | What goes in it |
 |----------|-----------------|
 | `GAME_ID` | the iOS and Android **Game IDs** from the Unity dashboard — empty means inert |
-| `PLACEMENT` | the ad unit IDs — Unity's defaults (`Interstitial_iOS`, `Banner_Android`, …) unless renamed |
+| `PLACEMENT` | the interstitial's **Placement ID** for each platform — iOS is `BP_Interstitial_iOS` |
 | `TEST_MODE` | `true` for development and TestFlight, `false` for the store build |
 
 And for the web build only, `MEASUREMENT_ID` in `src/track.ts` — the GA4
@@ -823,7 +771,7 @@ from, and `git push` is the deploy.
 | `src/sound.ts` | The blips. With `app.ts`, the only files in `src/` that know a DOM exists. |
 | `src/share.ts` | A finished daily, as three lines you can paste. Pure, so it has a test. |
 | `src/haptics.ts` | The taps you feel. The same three moments the sound marks, native only. |
-| `src/ads.ts` | When an interstitial is allowed to appear, the home-screen banner, and the Unity calls behind both. A no-op off a phone. |
+| `src/ads.ts` | When an interstitial is allowed to appear, and the Unity calls that show it. A no-op off a phone. |
 | `plugins/unity-ads/` | The Capacitor plugin for Unity Ads — Java for Android, Swift for iOS. |
 | `src/track.ts` | Consented analytics: GA4 on the web, Firebase on a phone. Inert until somebody says yes. |
 | `src/cli.ts` | Deals a board and prints it to a terminal. |

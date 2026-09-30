@@ -4,7 +4,8 @@
  * there is little in it to assert that would not just be restating the
  * plugin's own API back at it; the cadence is the part that was actually
  * specified, and the part a change could quietly get wrong. The rest checks
- * that the module stays inert where it should, and that AdMob is gone. */
+ * that the module stays inert where it should, that the interstitial is the
+ * only format, and that AdMob is gone. */
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
@@ -86,11 +87,9 @@ describe('the Unity module', () => {
     expect(Ads.started).toBe(false);
   });
 
-  it('has an ad unit for both formats on both stores', () => {
-    for (const format of [PLACEMENT.interstitial, PLACEMENT.banner]) {
-      expect(format.ios).toMatch(/_iOS$/);
-      expect(format.android).toMatch(/_Android$/);
-    }
+  it('has an interstitial placement on both stores', () => {
+    expect(PLACEMENT.ios).toMatch(/Interstitial_iOS$/);
+    expect(PLACEMENT.android).toMatch(/Interstitial_Android$/);
     /* Filled in from the dashboard; a string either way, never undefined. */
     expect(typeof GAME_ID.ios).toBe('string');
     expect(typeof GAME_ID.android).toBe('string');
@@ -114,6 +113,26 @@ describe('AdMob', () => {
     ];
     for (const f of files) {
       expect(readFileSync(new URL(f, root), 'utf8'), f).not.toMatch(/admob|ca-app-pub|GADApplicationIdentifier|gms\.ads\.APPLICATION_ID/i);
+    }
+  });
+});
+
+describe('ad formats', () => {
+  /* Interstitial only. No banner and no rewarded ad — asked for explicitly,
+     so a test holds it. */
+  it('is the interstitial and nothing else', () => {
+    const root = new URL('../', import.meta.url);
+    const files = [
+      'src/ads.ts',
+      'src/app.ts',
+      'styles.css',
+      'plugins/unity-ads/ios/Sources/UnityAdsPlugin/UnityAdsPlugin.swift',
+    ];
+    for (const f of files) {
+      const code = readFileSync(new URL(f, root), 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*$/gm, '');
+      expect(code, f).not.toMatch(/banner|rewarded|--ad-h/i);
     }
   });
 });
