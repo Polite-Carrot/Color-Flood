@@ -17,6 +17,7 @@ import { Haptics } from "./haptics.js";
 import { Ads } from "./ads.js";
 import { Track } from "./track.js";
 import { shareText } from "./share.js";
+import { persist, readLocal, restore } from "./store.js";
 /* ------------------------------------------------------------------ scaffolding */
 const $ = (id) => {
     const el = document.getElementById(id);
@@ -58,10 +59,10 @@ function readProgress(got) {
     const from = (got ?? {});
     return { best: readRun(from.best), par: readRun(from.par) };
 }
-const KEY = 'color-flood/v1';
-function load() {
+/* Where the save is kept, and why natively on a phone, is store.ts. This is
+   only the reading of it. */
+function parse(raw) {
     try {
-        const raw = localStorage.getItem(KEY);
         if (!raw)
             return { ...DEFAULTS };
         const got = JSON.parse(raw);
@@ -91,19 +92,19 @@ function load() {
         };
     }
     catch {
-        /* Private browsing, or storage switched off. The game is perfectly
-           playable without a save — only the streak is lost — so it carries on
-           rather than announcing a problem nobody can act on. */
+        /* A save that will not parse. The game is perfectly playable without
+           one, so it carries on rather than announcing a problem nobody can act
+           on. */
         return { ...DEFAULTS };
     }
 }
 function save() {
-    try {
-        localStorage.setItem(KEY, JSON.stringify(saved));
-    }
-    catch { /* see above */ }
+    persist(JSON.stringify(saved));
 }
-const saved = load();
+/* Read synchronously from the local copy so that nothing below can meet an
+   unset save; boot() then replaces it with the native copy, on a phone,
+   before anything is painted from it. */
+const saved = parse(readLocal());
 /* ------------------------------------------------------------------ the session */
 /* Two hints a puzzle, on every difficulty.
  *
@@ -1172,17 +1173,18 @@ function where() {
    tracking prompt is exactly that question, and asking it twice, once in our
    own words and once in the system's, is two chances to disagree with
    ourselves. So saved.ads is not something the sheet writes; it is what the
-   prompt answered. Null until it has. */
+   prompt answered. Null until it has, and null is a no: nothing is
+   personalised until the prompt has actually said Allow. */
 function applyConsent() {
-    const ads = saved.ads !== false;
+    const ads = saved.ads === true;
     Ads.setPersonalised(ads);
     if (saved.stats === true)
         void Track.start(ads);
     else
         void Track.stop();
 }
-/* What the tracking prompt came back with. On Android the plugin always says
-   authorized, which is right: there is no ATT there to have said otherwise. */
+/* What the tracking prompt came back with — or, on Android, where there is
+   no prompt, always no. */
 Ads.settle = (authorised) => {
     if (saved.ads === authorised)
         return;
@@ -1227,27 +1229,36 @@ function paintSettings() {
         $(id).setAttribute('aria-pressed', String(on));
     }
 }
-Sound.on = saved.sound;
-Haptics.on = saved.buzz;
-wire();
-paintRandomScreen();
-paintHome();
-/* Carries the saved answers into analytics and the ad flags before anything
-   else can ask for either. */
-applyConsent();
-/* Order matters, and it is the whole point of this pair.
-   
-   Ads.start() is what puts iOS's tracking prompt on screen. Starting it at
-   boot raced the sheet below: both went up at once and the system prompt
-   landed ON TOP of the question that was meant to explain it. So nothing
-   starts until there is an answer — the sheet first, then Continue, then the
-   system prompt, which is also the order Apple asks for a pre-prompt to come
-   in. It is also why Ads.start() is the only thing that can start the ad SDK.
-   
-   A returning player has answered already, so for them this is the boot it
-   always was. */
-if (askConsent())
-    Ads.start();
+/* Everything waits for the native copy of the save first — the buttons
+   included, so nothing can be tapped against a save about to be replaced. On
+   the web restore() hands back the local copy at once; on a phone it is a
+   few milliseconds, and never longer than RESTORE_TIMEOUT_MS. */
+async function boot() {
+    Object.assign(saved, parse(await restore()));
+    Sound.on = saved.sound;
+    Haptics.on = saved.buzz;
+    wire();
+    paintRandomScreen();
+    paintHome();
+    /* Carries the saved answers into analytics and the ad flags before
+       anything else can ask for either. */
+    applyConsent();
+    /* Order matters, and it is the whole point of this pair.
+  
+       Ads.start() is what puts iOS's tracking prompt on screen. Starting it at
+       boot raced the sheet below: both went up at once and the system prompt
+       landed ON TOP of the question that was meant to explain it. So nothing
+       starts until there is an answer — the sheet first, then Continue, then
+       the system prompt, which is also the order Apple asks for a pre-prompt to
+       come in. It is also why Ads.start() is the only thing that can start the
+       ad SDK.
+  
+       A returning player has answered already, so for them this is the boot it
+       always was. */
+    if (askConsent())
+        Ads.start();
+}
+void boot();
 /* Android's hardware back button. Without a listener Capacitor leaves the
    Activity's default in place, which finishes it — so back quit the game from
    any screen, mid-puzzle included, with no warning and no way to say no. This

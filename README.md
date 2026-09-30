@@ -336,7 +336,8 @@ Merge tops out at 11×11 where Flood reaches 16×16, for the same reason it does
 on the Random screen: two fronts make par dear to find.
 
 Progress is the fewest moves each level has been finished in, and the par it
-was finished against, in `localStorage`. Both are stored because "done" and
+was finished against, in the save (see **Where the save lives**). Both are
+stored because "done" and
 "done at par" are worth telling apart — and par is stored rather than
 recomputed, since working it out means *dealing* every level, which is several
 seconds of work to color a grid of numbers.
@@ -496,10 +497,18 @@ not do.
 *is* that question. Asking it twice, once in our words and once in the
 system's, is two chances to disagree with ourselves — so `saved.ads` is not
 something the sheet writes, it is what the prompt answered, and it stays null
-until it has. `authorized` is the only yes; denied, restricted and a prompt
-that somehow returns undetermined are all no, and a no opts the player out of
-Unity's data sharing (below). On Android the plugin answers `authorized`
-unconditionally, which is right there: there is no ATT to have said otherwise.
+until it has — and until it has, ads are not personalised. **Allow turns
+personalised ads on**; denied, restricted and a prompt that somehow returns
+undetermined are all no. This is how Color Sort does it, through the shared
+Polite Carrot ad package.
+
+Because tracking can be switched off later in iOS Settings without the game
+being asked, the status is read again (never prompted) before every ad is
+loaded, and a change reaches Unity before the request does.
+
+On Android there is no prompt, so nothing has been answered, and ads there are
+not personalised — also matching Color Sort, where they stay off on Android
+unless the player turns them on.
 
 **It comes first, and nothing else starts until it is answered.** The order on
 a first launch is:
@@ -538,14 +547,15 @@ whenever the answer changes:
 
 | Flag | Applies to | Sent as |
 |------|------------|---------|
-| `setUserConsent` | players Unity places in the EEA and the UK (GDPR) | always **false** |
-| `setUserOptOut` | US state privacy laws ("do not sell or share") | **true** when the tracking prompt said no |
+| `setUserConsent` | players Unity places in the EEA and the UK (GDPR) | **true** when tracking was allowed |
+| `setUserOptOut` | US state privacy laws ("do not sell or share") | **true** when it was not |
 
-GDPR consent is always false because nothing in this app asks a GDPR-grade
-question, and the tracking prompt is not one. The effect is that players in
-the EEA and the UK get non-personalised ads, which is compliant but earns
-less there. Personalised ads in those regions would need a proper consent
-management platform (a TCF-registered CMP) in front of the game.
+Both follow the tracking answer, exactly as Color Sort's shared ad package
+sends them. Worth knowing: Apple's prompt is not, strictly, a GDPR consent
+question, so treating Allow as consent in the EEA and the UK is a judgement
+both games share rather than something the prompt guarantees. A consent
+management platform (a TCF-registered CMP) is the fuller answer there, for
+both games at once.
 
 The answers live in the save as `ads` and `stats`, and **null is a third
 state**: "off because they said no" and "off because nobody has asked" want
@@ -1013,8 +1023,24 @@ nobody can check. Derived, it is simply what the record says. A run ending
 unplayed, and telling somebody at breakfast that their streak is zero would be
 both wrong and unkind.
 
-The record lives in `localStorage` and nowhere else, so it is per-browser and
-per-device, and clearing site data clears it.
+The record lives in the save with everything else: per-browser on the web,
+where clearing site data clears it, and in native storage on a phone.
+
+### Where the save lives
+
+On a phone the save is kept in **native storage** through
+`@capacitor/preferences` — UserDefaults on iOS, SharedPreferences on Android.
+The web view's `localStorage` is not a safe home for a thousand-level
+campaign: iOS may clear web view storage when the device is short of space.
+
+`localStorage` is still written on every save, as a second copy. It is what
+the web build uses, it lets the game read its settings synchronously while
+the native copy loads, and it is where a save from before this change is
+found: on the first launch after updating, it is carried into native storage
+automatically. At boot the native copy wins whenever there is one; if the
+native read fails, or takes more than three seconds, the game starts from the
+local copy rather than wait. Nothing can be tapped until the save is in.
+`src/store.test.ts` covers every way the two copies can disagree.
 
 Tapping a **cell** plays that cell's color, which on a phone is much the
 fastest way in — you point at the region you want rather than hunting for it

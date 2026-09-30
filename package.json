@@ -27,6 +27,7 @@
     "@capacitor-firebase/analytics": "^7.5.0",
     "@capacitor/app": "^7.1.2",
     "@capacitor/haptics": "^7.0.5",
+    "@capacitor/preferences": "^7.0.4",
     "color-flood-unity-ads": "file:plugins/unity-ads"
   }
 }

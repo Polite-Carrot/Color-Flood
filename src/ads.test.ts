@@ -146,13 +146,20 @@ describe('the fail-safes', () => {
   let loadAd: () => Promise<unknown>;
   let showAd: () => Promise<unknown>;
   const shows = vi.fn();
+  /* What the tracking prompt answers, which phone this is, and everything the
+     plugin was told, in order. */
+  let att: string;
+  let os: string;
+  let calls: string[];
 
   const plugin = {
-    initialize: async () => {},
-    setConsent: async () => {},
-    trackingStatus: async () => ({ status: 'authorized' }),
-    requestTracking: async () => ({ status: 'authorized' }),
-    loadInterstitial: () => loadAd(),
+    initialize: async () => { calls.push('initialize'); },
+    setConsent: async (o: { consent?: boolean; optOut?: boolean }) => {
+      calls.push(`consent=${o.consent} optOut=${o.optOut}`);
+    },
+    trackingStatus: async () => ({ status: att }),
+    requestTracking: async () => { if (att === 'notDetermined') att = 'authorized'; return { status: att }; },
+    loadInterstitial: () => { calls.push('load'); return loadAd(); },
     showInterstitial: () => { shows(); return showAd(); },
     addListener: async (event: string, fn: Listener) => { listeners[event] = fn; },
   };
@@ -181,14 +188,18 @@ describe('the fail-safes', () => {
     loadAd = async () => {};
     showAd = async () => {};
     shows.mockClear();
+    att = 'authorized';
+    os = 'ios';
+    calls = [];
     Object.assign(Ads, {
       gate: new Gate(T0), plugin: null, ready: false, starting: null, loaded: false,
-      loading: null, started: false, appeared: null, personalised: true,
+      loading: null, started: false, appeared: null, personalised: false,
+      settle: () => {},
     });
     Object.defineProperty(globalThis, 'window', {
       configurable: true,
       writable: true,
-      value: { Capacitor: { isNativePlatform: () => true, getPlatform: () => 'ios', registerPlugin: () => plugin } },
+      value: { Capacitor: { isNativePlatform: () => true, getPlatform: () => os, registerPlugin: () => plugin } },
     });
   });
 
@@ -255,6 +266,47 @@ describe('the fail-safes', () => {
     await expect(p).resolves.toBe(true);
     /* It was seen, so it counts, and a second one cannot follow straight on. */
     expect(Ads.gate.levels).toBe(0);
+  });
+
+  it('turns personalised ads on when tracking is allowed, before Unity starts', async () => {
+    att = 'notDetermined';                   /* first launch: the prompt shows, player taps Allow */
+    const answers: boolean[] = [];
+    Ads.settle = (yes) => { answers.push(yes); };
+    await due();
+    expect(Ads.personalised).toBe(true);
+    expect(answers.length).toBeGreaterThan(0);
+    expect(answers.every((yes) => yes)).toBe(true);   /* recorded as a yes, never a no */
+    expect(calls.slice(0, 2)).toEqual(['consent=true optOut=false', 'initialize']);
+  });
+
+  it('keeps them off when tracking is refused', async () => {
+    att = 'denied';
+    await due();
+    expect(Ads.personalised).toBe(false);
+    expect(calls.slice(0, 2)).toEqual(['consent=false optOut=true', 'initialize']);
+  });
+
+  it('keeps them off on Android, where nothing was asked', async () => {
+    os = 'android';
+    GAME_ID.android = 'test';                /* Android is not configured yet; pretend for this */
+    try {
+      await due();
+      expect(Ads.personalised).toBe(false);
+      expect(calls[0]).toBe('consent=false optOut=true');
+    } finally {
+      GAME_ID.android = '';
+    }
+  });
+
+  it('notices tracking switched off in iOS Settings before the next ad loads', async () => {
+    await due();
+    expect(calls).toContain('consent=true optOut=false');
+    calls = [];
+    att = 'denied';                          /* changed in Settings while the game ran */
+    Ads.loaded = false;
+    await Ads.load();
+    expect(Ads.personalised).toBe(false);
+    expect(calls).toEqual(['consent=false optOut=true', 'load']);
   });
 
   it('shows nothing before the cadence is met', async () => {

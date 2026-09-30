@@ -131,9 +131,8 @@ export const Ads = {
   plugin: null as Plugin | null,
   ready: false,
   starting: null as Promise<boolean> | null,
-  /* What the tracking prompt said. Personalised until told otherwise; when
-     told otherwise the player is opted out of Unity's data sharing. */
-  personalised: true,
+  /* What the tracking prompt said. Not personalised until it says yes. */
+  personalised: false,
   /* Called with the prompt's answer, so the rest of the app can record it and
      bring its own consent grants into line. Replaced in app.ts; a no-op here
      so ads.ts stays something that can be dropped into anything. */
@@ -199,30 +198,53 @@ export const Ads = {
 
   /* iOS 14.5+ wants an explicit prompt before the IDFA is readable, and that
      prompt IS the personalised-ads question — which is why the answer is read
-     back rather than thrown away. Android has no ATT and its half of the
-     plugin answers `authorized` unconditionally, which is the right answer
-     there. Swallowed: a prompt that fails is not a reason a puzzle game
-     cannot open. */
+     back rather than thrown away. Allow means personalised ads; anything
+     else means not.
+
+     Android has no prompt, so there is no question it has answered: ads
+     there are not personalised. That matches Color Sort, where personalised
+     ads on Android stay off unless the player turns them on. Swallowed: a
+     prompt that fails is not a reason a puzzle game cannot open. */
   async tracking(unity: Plugin): Promise<void> {
     try {
       let t = await unity.trackingStatus();
       if (t && t.status === 'notDetermined') t = await unity.requestTracking();
-      /* `authorized` is the only yes. Denied, restricted, and a prompt that
-         somehow came back still undetermined are all no. */
-      const yes = t?.status === 'authorized';
-      this.personalised = yes;
-      this.settle(yes);
+      this.decide(t?.status);
     } catch { /* leave it as it was */ }
   },
 
-  /* Unity ships no consent form, so what the game knows goes over as flags.
-       consent — the GDPR one, applied where GDPR is. Always false: nothing in
-         this app asks a GDPR-grade question, and the tracking prompt is not
-         one. Players in the EEA and the UK get non-personalised ads.
-       optOut — the US state-law one. On when the tracking prompt said no. */
+  /* `authorized` on iOS is the only yes. Denied, restricted, a prompt that
+     somehow came back undetermined, and Android are all no. */
+  decide(status: string | undefined): boolean {
+    const yes = platform() === 'ios' && status === 'authorized';
+    const changed = yes !== this.personalised;
+    this.personalised = yes;
+    this.settle(yes);
+    return changed;
+  },
+
+  /* Tracking can be switched off later in iOS Settings, without the game
+     being asked. So it is read again — never prompted — before each ad is
+     loaded, and a change goes to Unity before the request does. The same
+     check Color Sort's ad package makes. */
+  async recheck(): Promise<void> {
+    if (platform() !== 'ios') return;
+    try {
+      const t = await this.get()!.trackingStatus();
+      if (this.decide(t?.status)) await this.sendConsent();
+    } catch { /* keep the answer already held */ }
+  },
+
+  /* Unity ships no consent form, so the answer goes over as its two flags,
+     both following the tracking prompt — as Color Sort's ad package sends
+     them:
+       consent — the GDPR one, read for players Unity places in the EEA and
+         the UK. On when tracking was allowed.
+       optOut — the US state-law one ("do not sell or share"). On when it was
+         not. */
   async sendConsent(): Promise<void> {
     try {
-      await this.get()!.setConsent({ consent: false, optOut: !this.personalised });
+      await this.get()!.setConsent({ consent: this.personalised, optOut: !this.personalised });
     } catch { /* keep going; Unity falls back to its own defaults */ }
   },
 
@@ -245,6 +267,7 @@ export const Ads = {
 
     this.loading = (async () => {
       try {
+        await this.recheck();
         await this.plugin!.loadInterstitial({ placementId: PLACEMENT[platform()] });
         this.loaded = true;
         return true;
