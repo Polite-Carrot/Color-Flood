@@ -61,15 +61,16 @@ export class Gate {
    module stays exactly as inert as it is on the web. They are not secrets;
    every shipped build carries its own in the binary. */
 export const GAME_ID: Record<Platform, string> = {
-  ios: '',
+  ios: '800385205',
   android: '',
 };
 
-/* The ad units a new Unity project is created with. If they are renamed in
-   the dashboard, rename them here to match — Unity answers an unknown one
-   with a load error and nothing else. */
+/* The dashboard's "Network Placement ID" for each ad unit, copied exactly —
+   Unity answers an unknown one with a load error and nothing else. The ones
+   not yet taken from the dashboard are Unity's usual defaults; a banner
+   that does not exist simply never fills, and leaves no gap behind. */
 export const PLACEMENT: Record<'interstitial' | 'banner', Record<Platform, string>> = {
-  interstitial: { ios: 'Interstitial_iOS', android: 'Interstitial_Android' },
+  interstitial: { ios: 'BP_Interstitial_iOS', android: 'Interstitial_Android' },
   banner: { ios: 'Banner_iOS', android: 'Banner_Android' },
 };
 
