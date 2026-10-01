@@ -63,15 +63,14 @@ export class Gate {
    every shipped build carries its own in the binary. */
 export const GAME_ID: Record<Platform, string> = {
   ios: '800385205',
-  android: '',
+  android: '800386041',
 };
 
 /* The dashboard's "Network Placement ID" for the interstitial, copied
-   exactly — Unity answers an unknown one with a load error and nothing else.
-   Android's is Unity's usual default until the Android app is set up. */
+   exactly — Unity answers an unknown one with a load error and nothing else. */
 export const PLACEMENT: Record<Platform, string> = {
   ios: 'BP_Interstitial_iOS',
-  android: 'Interstitial_Android',
+  android: 'BP_Interstitial_Android',
 };
 
 /* Unity has no test IDs the way Google does: test mode is a flag sent with

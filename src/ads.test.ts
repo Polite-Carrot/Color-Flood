@@ -90,9 +90,9 @@ describe('the Unity module', () => {
   it('has an interstitial placement on both stores', () => {
     expect(PLACEMENT.ios).toMatch(/Interstitial_iOS$/);
     expect(PLACEMENT.android).toMatch(/Interstitial_Android$/);
-    /* Filled in from the dashboard; a string either way, never undefined. */
-    expect(typeof GAME_ID.ios).toBe('string');
-    expect(typeof GAME_ID.android).toBe('string');
+    /* Filled in from the Unity dashboard. */
+    expect(GAME_ID.ios).toBe('800385205');
+    expect(GAME_ID.android).toBe('800386041');
   });
 });
 
@@ -126,6 +126,7 @@ describe('ad formats', () => {
       'src/ads.ts',
       'src/app.ts',
       'styles.css',
+      'plugins/unity-ads/android/src/main/java/com/politecarrot/unityads/UnityAdsPlugin.java',
       'plugins/unity-ads/ios/Sources/UnityAdsPlugin/UnityAdsPlugin.swift',
     ];
     for (const f of files) {
@@ -288,14 +289,9 @@ describe('the fail-safes', () => {
 
   it('keeps them off on Android, where nothing was asked', async () => {
     os = 'android';
-    GAME_ID.android = 'test';                /* Android is not configured yet; pretend for this */
-    try {
-      await due();
-      expect(Ads.personalised).toBe(false);
-      expect(calls[0]).toBe('consent=false optOut=true');
-    } finally {
-      GAME_ID.android = '';
-    }
+    await due();
+    expect(Ads.personalised).toBe(false);
+    expect(calls[0]).toBe('consent=false optOut=true');
   });
 
   it('notices tracking switched off in iOS Settings before the next ad loads', async () => {

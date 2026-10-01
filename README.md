@@ -682,8 +682,8 @@ Setting it up, in `src/ads.ts`:
 
 | Constant | What goes in it |
 |----------|-----------------|
-| `GAME_ID` | the iOS and Android **Game IDs** from the Unity dashboard — empty means inert |
-| `PLACEMENT` | the interstitial's **Placement ID** for each platform — iOS is `BP_Interstitial_iOS` |
+| `GAME_ID` | the **Game IDs** from the Unity dashboard — iOS `800385205`, Android `800386041`; empty means inert |
+| `PLACEMENT` | the interstitial's **Placement ID** for each platform — `BP_Interstitial_iOS`, `BP_Interstitial_Android` |
 | `TEST_MODE` | `true` for development and TestFlight, `false` for the store build |
 
 And for the web build only, `MEASUREMENT_ID` in `src/track.ts` — the GA4
