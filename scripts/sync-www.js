@@ -14,16 +14,19 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const www = path.join(root, 'www');
 
-/* Rebuild js/ first. Running `cap sync` on a stale www/ is the failure this
-   exists to prevent: the app would ship whatever the last build left behind,
-   silently, and only on the phone. */
-execFileSync('npx', ['tsc', '-p', 'tsconfig.build.json'], { cwd: root, stdio: 'inherit' });
+/* The shared Unity Ads client is a plain script (window.PoliteCarrotAds), so it
+   is copied out of the installed, pinned package rather than imported —
+   exactly as color-sorting does. Committed, because GitHub Pages serves the
+   root and index.html names it. */
+const vendor = path.join(root, 'vendor/unity-ads.js');
+fs.mkdirSync(path.dirname(vendor), { recursive: true });
+fs.copyFileSync(createRequire(import.meta.url).resolve('@politecarrot/capacitor-unity-ads'), vendor);
 
 fs.rmSync(www, { recursive: true, force: true });
 fs.mkdirSync(www, { recursive: true });

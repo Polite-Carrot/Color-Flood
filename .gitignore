@@ -2,9 +2,20 @@ node_modules/
 *.log
 www/
 
-# Firebase, per app and downloaded from the console — see README.
-google-services.json
-GoogleService-Info.plist
+# Capacitor / iOS
+ios/App/build/
+ios/DerivedData/
+xcuserdata/
+*.xcuserstate
 
-# Gradle output from the in-repo Unity Ads plugin, made on every Android build.
-plugins/unity-ads/android/build/
+# Capacitor / Android
+android/.gradle/
+android/.idea/
+android/build/
+android/app/build/
+android/app/release/
+android/local.properties
+
+# Signing
+*.keystore
+*.jks

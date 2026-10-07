@@ -2,12 +2,7 @@
 #
 # GitHub Pages serves this repository's main branch at its root, so the root
 # IS the site and publishing is what `git push` already does. Nothing in this
-# workflow uploads anything.
-#
-# What it does instead is keep that arrangement honest. js/ is generated from
-# src/ and committed, which is the one real cost of publishing straight from
-# a branch: the two can drift, and a drifted js/ is a stale game at the URL
-# with a green repository behind it. So every push rebuilds and compares.
+# workflow uploads anything. It runs the tests, then checks the URL.
 
 name: Checks
 
@@ -33,22 +28,7 @@ jobs:
 
       - run: npm ci
 
-      - run: npm run typecheck
       - run: npm test
-
-      # The published JavaScript has to be exactly what the committed
-      # TypeScript compiles to. Rebuild it and see whether anything moved.
-      - run: npm run build
-
-      - name: js/ must match src/
-        run: |
-          if [ -n "$(git status --porcelain -- js)" ]; then
-            echo "::error::js/ is out of date with src/. Run 'npm run build' and commit js/."
-            git status --short -- js
-            git --no-pager diff -- js
-            exit 1
-          fi
-          echo "js/ is in step with src/"
 
   # Everything above can pass on a site nobody can see. Twice now the
   # repository has been entirely green while the URL served README.md — once

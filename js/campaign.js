@@ -16,6 +16,12 @@ import { optionsFor } from "./levels.js";
 export const CAMPAIGN_LENGTH = 1000;
 /* How many of those are drawn by hand. */
 export const TAUGHT = 5;
+/* Three at par, one fewer per move over it, and at least one for any finish. 0 = not finished. */
+export function starsFor(moves, par) {
+    if (moves <= 0 || par <= 0)
+        return 0;
+    return Math.max(1, 3 - Math.max(0, moves - par));
+}
 /* ------------------------------------------------------- the drawn levels */
 /* Boards are written as letters, because a grid of colour indices is
    unreadable and an unreadable board is one nobody will check. The letters

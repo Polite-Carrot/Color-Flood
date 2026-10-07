@@ -42,15 +42,15 @@ export class Gate {
     }
     shown(now) { this.since = now; this.levels = 0; }
 }
-/* ─── the plugin ───
-   Unity Ads, through the small plugin that lives in this repository at
-   plugins/unity-ads (installed as a file: dependency, so `cap sync` wires it
-   into both native projects like any other). The published ones were stuck
-   on old SDKs without the privacy flags, which is why it is ours. */
-/* The Game IDs from the Unity dashboard, one per store — Monetization, the
-   project's settings. Empty means that platform never asks for an ad: the
-   module stays exactly as inert as it is on the web. They are not secrets;
-   every shipped build carries its own in the binary. */
+/* ─── the client ───
+   Unity Ads through the studio's shared package,
+   @politecarrot/capacitor-unity-ads — the same one color-sorting uses. SDK
+   lifecycle, consent flags, ATT and playback live there; this file only owns
+   the IDs and the cadence. The package is a plain script that defines
+   window.PoliteCarrotAds; scripts/sync-www.js copies it to vendor/unity-ads.js
+   and index.html loads it before js/app.js. */
+/* The Game IDs from the Unity dashboard, one per store. Not secrets: every
+   shipped build carries its own in the binary. */
 export const GAME_ID = {
     ios: '800385205',
     android: '800386041',
@@ -61,266 +61,121 @@ export const PLACEMENT = {
     ios: 'BP_Interstitial_iOS',
     android: 'BP_Interstitial_Android',
 };
-/* Unity has no test IDs the way Google does: test mode is a flag sent with
-   the real Game ID, and Unity serves its own test creatives while it is on —
-   nothing is earned and nothing a developer taps counts against the account.
-   It stays true in every commit until the one that makes the store build,
-   and goes back straight after. The dashboard can also force it per
-   platform, which is the safer switch if it is ever in doubt. */
-export const TEST_MODE = true;
-/* The fail-safes. Nothing about an ad is allowed to hold up the game:
-   
-   - An ad that is not already loaded when one is due is SKIPPED, never waited
-     for. The player taps Next and gets the next puzzle at once; a load is
-     started so there is one ready at the next seam.
-   - An ad that has not appeared on screen within SHOW_TIMEOUT_MS of being
-     asked for is given up on, and the game carries on.
-   - An ad that did appear but never reports being closed is let go after
-     CLOSE_TIMEOUT_MS. It is a backstop against the SDK losing a callback,
-     set well past the length of any real ad, so the game can never be stuck
-     behind a win card that has already gone. */
-export const SHOW_TIMEOUT_MS = 5 * 1000;
+/* Live ads. Never tap your own ads; use the Unity dashboard's per-device test mode instead. */
+export const TEST_MODE = false;
+/* The package deliberately never times out a visible ad. This is the game's
+   own backstop: if the SDK loses its close callback, the player is let back
+   to the next board after this long, and the package's own `showing` flag
+   still stops a second ad stacking on the first. */
 export const CLOSE_TIMEOUT_MS = 2 * 60 * 1000;
+const host = () => (typeof window === 'undefined' ? null : window);
+const platform = () => (host()?.Capacitor?.getPlatform?.() === 'ios' ? 'ios' : 'android');
 const after = (ms, value) => new Promise((resolve) => setTimeout(() => resolve(value), ms));
-const cap = () => (typeof window === 'undefined' ? null : (window.Capacitor ?? null));
-const platform = () => {
-    const c = cap();
-    return (c && c.getPlatform && c.getPlatform()) === 'ios' ? 'ios' : 'android';
-};
 export const Ads = {
     gate: new Gate(Date.now()),
-    plugin: null,
-    ready: false,
-    starting: null,
-    /* What the tracking prompt said. Not personalised until it says yes. */
-    personalised: false,
-    /* Called with the prompt's answer, so the rest of the app can record it and
-       bring its own consent grants into line. Replaced in app.ts; a no-op here
-       so ads.ts stays something that can be dropped into anything. */
-    settle: ((_authorised) => { }),
-    /* An interstitial is loaded and waiting. Cleared by every show — each one
-       has to be loaded again — and by Unity saying a waiting one went stale. */
-    loaded: false,
-    loading: null,
-    /* Resolved by the plugin's interstitialStarted event — the ad is actually
-       on screen. Set up fresh for each show. */
-    appeared: null,
-    /* Set by start() and nothing else. Nothing else may start the SDK, or the
-       tracking prompt could come up in front of the usage-data sheet that is
-       meant to come first. */
+    client: null,
+    /* Set by start() and nothing else, so the tracking prompt can never come up
+       in front of the usage-data sheet that is meant to come first. */
     started: false,
+    showing: false,
+    preparing: null,
+    /* The app's saved answer. Effective personalisation is this AND iOS
+       tracking allowed — the package enforces the second half. */
+    personalised: false,
+    /* Called with the tracking prompt's answer so the app can save it and bring
+       analytics' consent grants into line. Replaced in app.ts. */
+    settle: ((_authorised) => { }),
     native() {
-        const c = cap();
-        return !!(c && c.isNativePlatform && c.isNativePlatform());
+        return !!host()?.Capacitor?.isNativePlatform?.();
     },
-    /* Native AND configured for this platform. Before the Game IDs are filled
-       in, a phone build behaves like the web one: no prompt, no requests. */
+    /* Native, configured for this platform, and the vendor script loaded. */
     on() {
-        return this.native() && GAME_ID[platform()] !== '';
+        return this.native() && GAME_ID[platform()] !== '' && !!host()?.PoliteCarrotAds;
     },
+    /* Created on first use rather than at import, so Capacitor's bridge is in
+       place and the web build never constructs one. */
     get() {
-        if (this.plugin)
-            return this.plugin;
-        const c = cap();
-        if (!c)
-            return null;
-        if (c.registerPlugin)
-            this.plugin = c.registerPlugin('UnityAds');
-        else if (c.Plugins && c.Plugins.UnityAds)
-            this.plugin = c.Plugins.UnityAds;
-        return this.plugin;
-    },
-    async init() {
+        if (this.client)
+            return this.client;
         if (!this.on())
-            return false;
-        if (this.ready)
-            return true;
-        if (this.starting)
-            return this.starting;
-        const unity = this.get();
-        if (!unity)
-            return false;
-        /* Order matters. The tracking prompt first, since its answer decides
-           whether ads are personalised; then the privacy flags that answer turns
-           into; then the SDK, so the very first request already carries them. */
-        this.starting = (async () => {
-            await this.tracking(unity);
-            await this.sendConsent();
-            await unity.initialize({ gameId: GAME_ID[platform()], testMode: TEST_MODE });
-            await this.listen(unity);
-            this.ready = true;
-            return true;
-        })().catch(() => {
-            /* Offline at launch, most likely. Let the next call try again rather
-               than leaving the whole session without ads. */
-            this.starting = null;
-            return false;
+            return null;
+        this.client = host().PoliteCarrotAds.createUnityAds({
+            ios: { gameId: GAME_ID.ios, interstitial: PLACEMENT.ios },
+            android: { gameId: GAME_ID.android, interstitial: PLACEMENT.android },
+            testMode: TEST_MODE,
         });
-        return this.starting;
+        return this.client;
     },
-    /* iOS 14.5+ wants an explicit prompt before the IDFA is readable, and that
-       prompt IS the personalised-ads question — which is why the answer is read
-       back rather than thrown away. Allow means personalised ads; anything
-       else means not.
-  
-       Android has no prompt, so there is no question it has answered: ads
-       there are not personalised. That matches Color Sort, where personalised
-       ads on Android stay off unless the player turns them on. Swallowed: a
-       prompt that fails is not a reason a puzzle game cannot open. */
-    async tracking(unity) {
-        try {
-            let t = await unity.trackingStatus();
-            if (t && t.status === 'notDetermined')
-                t = await unity.requestTracking();
-            this.decide(t?.status);
-        }
-        catch { /* leave it as it was */ }
-    },
-    /* `authorized` on iOS is the only yes. Denied, restricted, a prompt that
-       somehow came back undetermined, and Android are all no. */
-    decide(status) {
-        const yes = platform() === 'ios' && status === 'authorized';
-        const changed = yes !== this.personalised;
-        this.personalised = yes;
-        this.settle(yes);
-        return changed;
-    },
-    /* Tracking can be switched off later in iOS Settings, without the game
-       being asked. So it is read again — never prompted — before each ad is
-       loaded, and a change goes to Unity before the request does. The same
-       check Color Sort's ad package makes. */
-    async recheck() {
-        if (platform() !== 'ios')
-            return;
-        try {
-            const t = await this.get().trackingStatus();
-            if (this.decide(t?.status))
-                await this.sendConsent();
-        }
-        catch { /* keep the answer already held */ }
-    },
-    /* Unity ships no consent form, so the answer goes over as its two flags,
-       both following the tracking prompt — as Color Sort's ad package sends
-       them:
-         consent — the GDPR one, read for players Unity places in the EEA and
-           the UK. On when tracking was allowed.
-         optOut — the US state-law one ("do not sell or share"). On when it was
-           not. */
-    async sendConsent() {
-        try {
-            await this.get().setConsent({ consent: this.personalised, optOut: !this.personalised });
-        }
-        catch { /* keep going; Unity falls back to its own defaults */ }
-    },
-    /* Hung once, after initialize. */
-    async listen(unity) {
-        await unity.addListener('interstitialExpired', () => {
-            this.loaded = false;
-            if (this.gate.warming())
-                void this.load();
-        });
-        await unity.addListener('interstitialStarted', () => {
-            if (this.appeared)
-                this.appeared();
-        });
-    },
-    async load() {
-        if (!this.started)
-            return false;
-        if (!(await this.init()))
-            return false;
-        if (this.loaded)
-            return true;
-        if (this.loading)
-            return this.loading;
-        this.loading = (async () => {
-            try {
-                await this.recheck();
-                await this.plugin.loadInterstitial({ placementId: PLACEMENT[platform()] });
-                this.loaded = true;
-                return true;
-            }
-            catch {
-                this.loaded = false;
-                return false;
-            }
-            finally {
-                this.loading = null;
-            }
-        })();
-        return this.loading;
+    warm() {
+        const client = this.get();
+        if (!client || !this.started || this.showing)
+            return Promise.resolve(false);
+        if (this.preparing)
+            return this.preparing;
+        this.preparing = client.prepareInterstitial()
+            .then((r) => r.loaded === true, () => false)
+            .finally(() => { this.preparing = null; });
+        return this.preparing;
     },
     /* Called once per puzzle finished. */
     noteWin() {
         if (!this.on())
             return;
         this.gate.note();
-        if (this.gate.warming() && !this.loaded && !this.loading)
-            void this.load();
+        if (this.gate.warming() && !this.get().state().prepared.interstitial)
+            void this.warm();
     },
     /* Called where the game is about to leave a finished board — the win card's
-       buttons, all three of them. Returns whether an ad was shown, and always
-       returns a promise so the caller can await it the same way either way.
-       However it goes, the promise settles: see the fail-safes above. */
+       three buttons. Never waits on the network: an ad that is not already
+       loaded is skipped, and one is lined up for the next seam. */
     async maybeShow() {
-        if (!this.on() || !this.started)
+        if (!this.on() || !this.started || this.showing)
             return false;
         if (!this.gate.due(Date.now()))
             return false;
-        if (!this.loaded) {
-            /* Not ready: skip this seam rather than keep the player waiting on the
-               network, and line one up for the next. */
-            if (!this.loading)
-                void this.load();
+        const client = this.get();
+        if (!client.state().prepared.interstitial) {
+            void this.warm();
             return false;
         }
-        this.loaded = false;
-        const appeared = new Promise((resolve) => { this.appeared = () => resolve('appeared'); });
-        const closed = this.plugin.showInterstitial().then(() => 'closed', () => 'failed');
-        /* Whenever an ad does get seen — even one that turns up after the game
-           gave up on it — the clock and the count start again from there. */
-        void closed.then((how) => { if (how === 'closed')
-            this.gate.shown(Date.now()); });
+        this.showing = true;
         try {
-            const first = await Promise.race([appeared, closed, after(SHOW_TIMEOUT_MS, 'slow')]);
-            if (first !== 'appeared' && first !== 'closed')
-                return false;
-            if (first === 'appeared') {
-                /* Seen, so it counts now — even if the SDK never says it closed. */
-                this.gate.shown(Date.now());
-                const end = await Promise.race([closed, after(CLOSE_TIMEOUT_MS, 'stuck')]);
-                if (end === 'failed')
-                    return false;
-            }
-            return true;
+            const shown = client.showInterstitial().then((r) => r.shown === true, () => false);
+            /* Seen, so it counts — even one that closes after the backstop let go. */
+            void shown.then((yes) => { if (yes)
+                this.gate.shown(Date.now()); });
+            return await Promise.race([shown, after(CLOSE_TIMEOUT_MS, true)]);
         }
         finally {
-            this.appeared = null;
-            /* Line the next one up now, so the next threshold is not spent waiting
-               on a network call. */
-            void this.load();
+            this.showing = false;
+            void this.warm();
         }
     },
-    /* The flags go again, and any ad already warmed was requested under the old
-       setting, so a fresh one is loaded in its place. */
+    /* A change goes to Unity at once; the package drops any ad loaded under the
+       old answer, so a fresh one is warmed in its place. */
     setPersonalised(on) {
-        if (this.personalised === on)
-            return;
         this.personalised = on;
-        if (!this.ready)
+        const client = this.get();
+        if (!client || client.state().personalized === on)
             return;
-        void this.sendConsent().then(() => {
-            this.loaded = false;
-            void this.load();
-        });
+        void client.setPersonalized(on).then(() => { if (this.started)
+            void this.warm(); }, () => { });
     },
-    /* Initialise at boot rather than mid-play, so the iOS tracking prompt
-       happens while the player is still on the home screen, and the first
-       interstitial is warm long before the third win. */
+    /* After the privacy sheet: the ATT prompt (iOS only; Android answers
+       "notApplicable", which is a no), the consent flags that answer becomes,
+       then the SDK and a first warm ad well before the third win. */
     start() {
         if (!this.on() || this.started)
             return;
         this.started = true;
-        void this.load();
+        const client = this.get();
+        void (async () => {
+            try {
+                this.settle((await client.requestTracking()) === 'authorized');
+            }
+            catch { /* keep the saved answer */ }
+            await client.init();
+            await this.warm();
+        })();
     },
 };

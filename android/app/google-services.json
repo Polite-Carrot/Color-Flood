@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "902330987715",
+    "project_id": "color-flood-730d7",
+    "storage_bucket": "color-flood-730d7.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:902330987715:android:7e432966f8c8f086521e76",
+        "android_client_info": {
+          "package_name": "com.politecarrot.colorflood"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD_0ioGGadgKnTffZEjfNgZlSH9WiYMAyI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

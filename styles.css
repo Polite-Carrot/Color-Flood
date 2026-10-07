@@ -622,9 +622,8 @@ input:focus-visible {
 .tile:hover:not(:disabled) { background: #ffe8c6; }
 .tile:active:not(:disabled) { transform: translateY(var(--lift)); box-shadow: 0 0 0 var(--ink); }
 .tile:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
-/* Done, and done at par. Two states worth telling apart, because par is the
-   thing worth going back for. */
-.tile.is-done { background: var(--grass, #35c46b); color: #fff; }
+/* Any finish is the same tile; the stars carry the grade. */
+.tile.is-done { background: #fff6e4; }
 .tile.is-par { background: var(--gold); color: var(--ink); }
 .tile:disabled {
   opacity: .5;
@@ -636,6 +635,14 @@ input:focus-visible {
 /* A locked level has nothing to report, so it says nothing rather than
    showing an empty space where a score would be. */
 .tile:disabled .tile__mark { visibility: hidden; }
+
+.stars { display: inline-flex; gap: 1px; line-height: 1; }
+.star { color: var(--ink-faint); }
+.star.is-on { color: var(--gold); -webkit-text-stroke: 1px var(--ink); }
+.tile .stars { font-size: 13px; }
+.tile.is-par .star.is-on { color: #fff; }
+.stars--big { display: flex; justify-content: center; gap: 6px; font-size: 40px; margin: 4px 0 0; }
+.stars--big .star.is-on { -webkit-text-stroke: 2px var(--ink); }
 
 /* ───────── the daily calendar ───────── */
 

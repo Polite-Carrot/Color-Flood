@@ -13,7 +13,7 @@ dependencies {
     implementation project(':capacitor-app')
     implementation project(':capacitor-haptics')
     implementation project(':capacitor-preferences')
-    implementation project(':color-flood-unity-ads')
+    implementation project(':politecarrot-capacitor-unity-ads')
 
 }
 

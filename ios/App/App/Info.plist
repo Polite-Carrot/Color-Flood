@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>CAPACITOR_DEBUG</key>
+	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
@@ -22,6 +24,25 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+    <false/>
+    <key>UISceneConfigurations</key>
+    <dict>
+      <key>UIWindowSceneSessionRoleApplication</key>
+      <array>
+        <dict>
+            <key>UISceneConfigurationName</key>
+            <string>Default Configuration</string>
+            <key>UISceneDelegateClassName</key>
+            <string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+            <key>UISceneStoryboardFile</key>
+            <string>Main</string>
+        </dict>
+      </array>
+    </dict>
+	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -30,10 +51,9 @@
 	<array>
 		<string>armv7</string>
 	</array>
-	<!-- Portrait only on a phone. The board is square and limited by the
-	     width, so a sideways phone spends its long axis on nothing: measured
-	     at 844x390, a 14x14 board came out 168px — 12px a cell — against 364px
-	     upright. An iPad has height to spare either way and keeps all four. -->
+	<!-- Portrait only on a phone. The board is square and limited by the width,
+	     so a sideways phone spends its long axis on nothing. An iPad has height
+	     to spare either way and keeps all four. -->
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
@@ -47,16 +67,24 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<!-- iOS 14.5+ needs an explicit prompt before Unity Ads may read the
-	     IDFA. Declining is fine: ads still show, just non-personalised. -->
+	<!-- iOS 14.5+ needs an explicit prompt before Unity Ads may read the IDFA.
+	     Declining is fine: ads still show, just non-personalised. -->
 	<key>NSUserTrackingUsageDescription</key>
 	<string>Allow tracking to see ads relevant to you. You can decline and see less personalised ads.</string>
-	<!-- Firebase Analytics starts collecting as soon as the SDK loads, which
-	     is before anybody has been asked anything. These default it off;
-	     track.ts turns it on through the plugin once the privacy sheet has
-	     been answered yes. -->
-	<key>FIREBASE_ANALYTICS_COLLECTION_DEACTIVATED</key>
-	<true/>
+	<!-- SKAdNetwork identifier for Unity Ads, so Apple attributes installs from
+	     Unity-served ads. -->
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>4dzt52r2t5.skadnetwork</string>
+		</dict>
+	</array>
+	<!-- Firebase Analytics off until the privacy sheet says yes; track.ts turns
+	     it on through the plugin. _ENABLED=false, NOT _DEACTIVATED: that one is
+	     permanent and Firebase silently ignores every runtime setEnabled. -->
+	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
+	<false/>
 	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_ANALYTICS_STORAGE</key>
 	<false/>
 	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_STORAGE</key>
@@ -65,16 +93,5 @@
 	<false/>
 	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS</key>
 	<false/>
-	<!-- Unity's SKAdNetwork identifier, so Apple attributes installs that
-	     came from a Unity-served ad. Unity publishes a longer list covering
-	     the other networks that buy through it; adding those raises what
-	     some advertisers will pay, and costs nothing but lines here. -->
-	<key>SKAdNetworkItems</key>
-	<array>
-		<dict>
-			<key>SKAdNetworkIdentifier</key>
-			<string>4dzt52r2t5.skadnetwork</string>
-		</dict>
-	</array>
 </dict>
 </plist>

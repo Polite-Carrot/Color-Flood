@@ -11,7 +11,7 @@ import { bestMove, generate } from "./generator.js";
 import { colour, ink, MAX_PALETTE } from "./palette.js";
 import { blobOf, blobColour, canPlay, movesLeft, play, restart, start, undo, won } from "./play.js";
 import { MODES, bestStreakOf, dailySeed, dailySetting, dayKey, firstDailyDate, isPlayableDay, modeLabel, optionsFor, settingFor, settingsFor, streakOf, } from "./levels.js";
-import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting } from "./campaign.js";
+import { CAMPAIGN_LENGTH, campaignLevel, campaignSetting, starsFor } from "./campaign.js";
 import { Sound } from "./sound.js";
 import { Haptics } from "./haptics.js";
 import { Ads } from "./ads.js";
@@ -408,6 +408,9 @@ function finish() {
         save();
     }
     const par = game.level.par;
+    const stars = starsFor(used, par);
+    paintStars($('win-stars'), stars);
+    $('win-stars').setAttribute('aria-label', stars + (stars === 1 ? ' star' : ' stars') + ' of 3');
     $('win-swatch').style.background = colour(blobColour(game)).hex;
     $('win-title').textContent = used === par ? 'Par!' : 'Flooded!';
     $('win-line').textContent = used === par
@@ -444,7 +447,7 @@ function finish() {
     if (campaign) {
         next.hidden = campaign.n >= CAMPAIGN_LENGTH;
         again.hidden = true;
-        home.textContent = 'Levels';
+        home.textContent = 'Menu';
         if (campaign.n >= CAMPAIGN_LENGTH) {
             $('win-note').textContent =
                 'That is the last of them. ' + modeLabel(campaign.mode) + ' finished.';
@@ -459,7 +462,7 @@ function finish() {
         next.hidden = true;
         again.hidden = false;
         again.textContent = 'New puzzle';
-        home.textContent = 'Home';
+        home.textContent = 'Menu';
     }
     Track.event('puzzle_done', { ...where(), moves: used, over_par: used - game.level.par });
     Sound.win();
@@ -479,6 +482,15 @@ function recordDaily(day) {
         return;
     saved.days.push(day);
     save();
+}
+function paintStars(into, count) {
+    into.replaceChildren(...[0, 1, 2].map((i) => {
+        const star = document.createElement('span');
+        star.className = i < count ? 'star is-on' : 'star';
+        star.textContent = '★';
+        star.setAttribute('aria-hidden', 'true');
+        return star;
+    }));
 }
 /* ------------------------------------------------------------------ dealing */
 function begin(kind, setting, seed, day) {
@@ -658,7 +670,7 @@ const chapterOf = { flood: 0, merge: 0 };
 function showLevels(mode, page) {
     const run = saved.progress[mode];
     const done = run.best.filter((m) => m > 0).length;
-    const atPar = run.best.filter((m, i) => m > 0 && m === run.par[i]).length;
+    const earned = run.best.reduce((sum, m, i) => sum + starsFor(m, run.par[i]), 0);
     /* Opened without a page: the one holding the furthest level reached, so a
        player at 340 does not start at 1 every time. */
     if (page === undefined) {
@@ -673,7 +685,7 @@ function showLevels(mode, page) {
     const to = Math.min(CAMPAIGN_LENGTH, from + CHAPTER - 1);
     $('levels-heading').textContent = modeLabel(mode);
     $('levels-note').textContent =
-        done + ' of ' + CAMPAIGN_LENGTH + ' done' + (atPar ? ' · ' + atPar + ' at par' : '');
+        done + ' of ' + CAMPAIGN_LENGTH + ' done' + (earned ? ' · ' + earned + ' ★' : '');
     $('chapter-name').textContent = from + ' – ' + to;
     $('chapter-prev').disabled = at === 0;
     $('chapter-next').disabled = at === chapters - 1;
@@ -691,14 +703,16 @@ function showLevels(mode, page) {
         const number = document.createElement('span');
         number.textContent = String(n);
         const mark = document.createElement('span');
-        mark.className = 'tile__mark';
+        mark.className = 'tile__mark stars';
         tile.append(number, mark);
         const best = run.best[n - 1];
+        const par = run.par[n - 1];
+        const stars = starsFor(best, par);
+        paintStars(mark, stars);
         if (best > 0) {
-            const par = run.par[n - 1];
-            tile.classList.add(par > 0 && best <= par ? 'is-par' : 'is-done');
-            mark.textContent = String(best);
-            tile.setAttribute('aria-label', 'Level ' + n + ', done in ' + best + ' moves' + (par > 0 ? ', par ' + par : ''));
+            tile.classList.add(stars === 3 ? 'is-par' : 'is-done');
+            tile.setAttribute('aria-label', 'Level ' + n + ', ' + stars + (stars === 1 ? ' star' : ' stars') + ', done in ' + best + ' moves' +
+                (par > 0 ? ', par ' + par : ''));
         }
         else if (tile.disabled) {
             tile.setAttribute('aria-label', 'Level ' + n + ', locked');
@@ -823,7 +837,7 @@ function wire() {
         }
     });
     $('again').addEventListener('click', () => dealRandom($('again')));
-    /* The three ways off a finished board, and the only three places an ad is
+    /* The four ways off a finished board, and the only places an ad is
        allowed to appear: the card is closed, the ad is offered the seam, and
        whatever comes next happens after it. Nothing here interrupts a board
        being played, and the awaits are no-ops on the web build. */
@@ -839,13 +853,23 @@ function wire() {
         if (at)
             playCampaign(at.mode, at.n + 1, $('win-next'));
     });
+    $('win-retry').addEventListener('click', async () => {
+        closeOverlay('overlay-win');
+        await Ads.maybeShow();
+        if (!session)
+            return;
+        restart(session.game);
+        session.hintsLeft = HINTS;
+        session.hinted = -1;
+        Track.event('puzzle_start', where());
+        paint();
+        say('');
+    });
     $('win-home').addEventListener('click', async () => {
         closeOverlay('overlay-win');
         const was = session;
         await Ads.maybeShow();
-        if (was?.campaign)
-            showLevels(was.campaign.mode);
-        else if (was?.kind === 'daily') {
+        if (was?.kind === 'daily') {
             paintDailyScreen();
             show('screen-daily');
         }

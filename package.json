@@ -4,30 +4,26 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "gen": "node --experimental-strip-types --no-warnings src/cli.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "gen": "node scripts/gen.js",
     "serve": "node scripts/serve.js",
     "fonts": "node scripts/fetch-fonts.js",
     "www": "node scripts/sync-www.js",
-    "sync": "node scripts/check-firebase.js && node scripts/sync-www.js && cap sync",
+    "sync": "cap sync",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "test:watch": "vitest"
   },
   "devDependencies": {
-    "@capacitor/android": "^7.6.9",
-    "@capacitor/cli": "^7.6.9",
-    "@capacitor/core": "^7.6.9",
-    "@capacitor/ios": "^7.6.9",
-    "@types/node": "^26.4.1",
-    "typescript": "^5.8.0",
     "vitest": "^2.1.0"
   },
   "dependencies": {
-    "@capacitor-firebase/analytics": "^7.5.0",
-    "@capacitor/app": "^7.1.2",
-    "@capacitor/haptics": "^7.0.5",
-    "@capacitor/preferences": "^7.0.4",
-    "color-flood-unity-ads": "file:plugins/unity-ads"
+    "@capacitor-firebase/analytics": "^8.5.1",
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/haptics": "^8.0.0",
+    "@capacitor/ios": "^8.5.0",
+    "@capacitor/preferences": "^8.0.0",
+    "@politecarrot/capacitor-unity-ads": "github:Polite-Carrot/polite-carrot-unity-ads#96f31aa21ee8cd5e966797b37c438540c092f444"
   }
 }

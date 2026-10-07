@@ -14,5 +14,5 @@ project(':capacitor-haptics').projectDir = new File('../node_modules/@capacitor/
 include ':capacitor-preferences'
 project(':capacitor-preferences').projectDir = new File('../node_modules/@capacitor/preferences/android')
 
-include ':color-flood-unity-ads'
-project(':color-flood-unity-ads').projectDir = new File('../plugins/unity-ads/android')
+include ':politecarrot-capacitor-unity-ads'
+project(':politecarrot-capacitor-unity-ads').projectDir = new File('../node_modules/@politecarrot/capacitor-unity-ads/android')

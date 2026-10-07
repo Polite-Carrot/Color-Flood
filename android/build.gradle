@@ -3,12 +3,19 @@
 buildscript {
     
     repositories {
+        // Aliyun mirror first — dl.google.com was dropping mid-transfer on
+        // this network and stalling Gradle Sync for minutes at a time on
+        // artifacts under 20 kB. Aliyun serves the same Google Maven bytes
+        // from a different CDN; google() below is kept as a fallback for
+        // anything the mirror is missing.
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
         google()
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.7.2'
-        classpath 'com.google.gms:google-services:4.4.2'
+        classpath 'com.android.tools.build:gradle:9.3.2'
+        classpath 'com.google.gms:google-services:4.4.4'
 
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
@@ -19,8 +26,23 @@ apply from: "variables.gradle"
 
 allprojects {
     repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
         google()
         mavenCentral()
+    }
+}
+
+// Force every Android subproject onto the Build-Tools already installed
+// locally. AGP 8.13's default is 35.0.0, which isn't installed and cannot be
+// downloaded on this network. Applied here rather than in each module because
+// `cap sync` regenerates capacitor-cordova-android-plugins/build.gradle and
+// strips per-module overrides.
+subprojects {
+    afterEvaluate { proj ->
+        if (proj.hasProperty('android')) {
+            proj.android.buildToolsVersion = "36.1.0"
+        }
     }
 }
 

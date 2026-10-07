@@ -8,7 +8,8 @@
  *
  * Nothing runs until somebody has said yes. GA4 sets cookies and Firebase
  * writes an install id, and both need consent BEFORE they are written — which
- * is why the native SDKs ship deactivated in the manifest and the plist, and
+ * is why the native SDKs ship with collection disabled in the manifest and
+ * the plist (the overridable _ENABLED=false, never _DEACTIVATED), and
  * why gtag.js is injected on acceptance rather than at load.
  *
  * Every call is safe at any time. Before consent, with no measurement id, with
@@ -45,6 +46,14 @@ export function trim(params) {
     return out;
 }
 const win = () => (typeof window === 'undefined' ? null : window);
+async function grant(fb, analytics, ads) {
+    if (!fb.setConsent)
+        return;
+    await fb.setConsent({ type: 'ANALYTICS_STORAGE', status: analytics });
+    await fb.setConsent({ type: 'AD_STORAGE', status: ads });
+    await fb.setConsent({ type: 'AD_USER_DATA', status: ads });
+    await fb.setConsent({ type: 'AD_PERSONALIZATION', status: ads });
+}
 export const Track = {
     /* Two flags, not one, and the difference is why turning the setting off and
        on again works. `injected` says the script tag exists, which can only
@@ -91,12 +100,7 @@ export const Track = {
             const forAds = ads ? 'GRANTED' : 'DENIED';
             try {
                 await fb.setEnabled({ enabled: true });
-                await fb.setConsent?.({ consents: [
-                        { type: 'ANALYTICS_STORAGE', status: 'GRANTED' },
-                        { type: 'AD_STORAGE', status: forAds },
-                        { type: 'AD_USER_DATA', status: forAds },
-                        { type: 'AD_PERSONALIZATION', status: forAds },
-                    ] });
+                await grant(fb, 'GRANTED', forAds);
             }
             catch { /* an SDK that will not start is not a reason to stop playing */ }
             return;
@@ -137,12 +141,7 @@ export const Track = {
                 return;
             try {
                 await fb.setEnabled({ enabled: false });
-                await fb.setConsent?.({ consents: [
-                        { type: 'ANALYTICS_STORAGE', status: 'DENIED' },
-                        { type: 'AD_STORAGE', status: 'DENIED' },
-                        { type: 'AD_USER_DATA', status: 'DENIED' },
-                        { type: 'AD_PERSONALIZATION', status: 'DENIED' },
-                    ] });
+                await grant(fb, 'DENIED', 'DENIED');
             }
             catch { /* nothing to do about it */ }
             return;

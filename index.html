@@ -195,13 +195,15 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="win-title">
     <div class="modal__swatch" id="win-swatch"></div>
     <h2 id="win-title">Flooded!</h2>
+    <div class="stars stars--big" id="win-stars"></div>
     <p class="modal__line" id="win-line"></p>
     <p class="modal__note" id="win-note"></p>
     <div class="modal__actions">
       <button id="win-share" class="btn" hidden>Share</button>
       <button id="win-next" class="btn btn--primary" hidden>Next level</button>
       <button id="win-again" class="btn btn--primary">New puzzle</button>
-      <button id="win-home" class="btn">Home</button>
+      <button id="win-retry" class="btn">Retry</button>
+      <button id="win-home" class="btn">Menu</button>
     </div>
   </div>
 </div>
@@ -280,6 +282,7 @@
   </div>
 </div>
 
+<script src="vendor/unity-ads.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

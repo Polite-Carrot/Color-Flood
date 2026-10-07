@@ -292,7 +292,7 @@ nothing while looking exactly as if it were.
 The drawn boards also have to use a run of colors from the start of the
 palette with no gaps — the picker shows one swatch per color in the palette,
 so a hole means offering a color that appears nowhere on the board, on the
-levels whose entire job is teaching what a move does. `campaign.ts` throws if
+levels whose entire job is teaching what a move does. `campaign.js` throws if
 a board leaves one, and a test checks all ten.
 
 ### A thousand levels, and where the ramp stops
@@ -348,14 +348,20 @@ The site is wrapped for iOS and Android with **Capacitor**, the same way the
 sort game is. `android/` and `ios/` are checked in.
 
 ```
-npm run sync          # rebuild js/, gather www/, and copy it into both projects
+npx cap sync          # rebuild js/, vendor the ad client, gather www/, copy into both projects
 npx cap open android  # then Build > Generate Signed Bundle / APK
 npx cap open ios      # then Product > Archive
 ```
 
-`npm run sync` rebuilds before it copies, on purpose: running `cap sync`
-against a stale `www/` ships whatever the last build left behind, silently,
-and only on the phone.
+`capacitor.config.js` runs `scripts/check-firebase.js` and
+`scripts/sync-www.js` every time the CLI loads it — the same arrangement as
+color-sorting — so a plain `npx cap sync` (or `npm run sync`) always rebuilds
+before it copies: running `cap sync` against a stale `www/` ships whatever the
+last build left behind, silently, and only on the phone.
+
+Capacitor 8. iOS uses **Swift Package Manager** (no CocoaPods, no Podfile);
+Android uses the same Gradle setup as color-sorting (AGP 9, Gradle 9.5,
+Aliyun mirrors ahead of `google()`).
 
 **There is no IPA or APK in the repository, and there cannot be.** An `.ipa`
 needs Xcode and a macOS machine plus an Apple Developer signing identity; an
@@ -366,7 +372,7 @@ press.
 
 `www/` is generated and gitignored. It exists because Capacitor copies its
 `webDir` wholesale into the bundle, and this repository's web root is the
-repository — pointing it there would ship the TypeScript, the tests and every
+repository — pointing it there would ship the scripts, the tests and every
 dependency inside the app.
 
 ### Icons
@@ -434,7 +440,7 @@ home, nothing open → false, and only then App.exitApp()
 ```
 
 Reached through `Capacitor.registerPlugin('App')` rather than by importing
-`@capacitor/app`, for the same reason `ads.ts` and `track.ts` do it: nothing
+`@capacitor/app`, for the same reason `ads.js` and `track.js` do it: nothing
 here is bundled, `js/` is plain ES modules served off disk, and a bare
 specifier is not something a web view can resolve. The import would have
 thrown on the phone and the button would have gone on quitting. The npm
@@ -448,38 +454,16 @@ the sort game. There is no banner and no rewarded ad.
 
 #### The plugin
 
-The published Capacitor plugins for Unity were on old SDKs without the
-privacy flags, so this one is ours and lives in the repository at `plugins/unity-ads`. It is
-installed as a `file:` dependency (`color-flood-unity-ads`), which is what
-lets `cap sync` wire it into both native projects exactly like any other
-plugin — no hand edits to the Xcode project or to `MainActivity`.
+The studio's shared package, **`@politecarrot/capacitor-unity-ads`**
+(github: Polite-Carrot/polite-carrot-unity-ads, pinned to a commit in
+`package.json`) — the same one color-sorting and border-hopper use. It owns the
+SDK lifecycle, consent flags, ATT and playback; `js/ads.js` owns only the IDs
+and the cadence. `.npmrc` sets `allow-git=root` so npm will fetch it.
 
-```
-plugins/unity-ads/
-  package.json                     the capacitor block cap sync reads
-  ColorFloodUnityAds.podspec       iOS: UnityAds 4.20.1, pinned
-  android/build.gradle             Android: com.unity3d.ads:unity-ads:4.20.1, pinned
-  android/src/main/java/.../UnityAdsPlugin.java
-  ios/Sources/UnityAdsPlugin/UnityAdsPlugin.swift
-```
-
-Both halves use the ad-object API Unity introduced in 4.x —
-`InterstitialAd`/`UADSInterstitialAd` and their configuration builders. The
-older `UnityAds.load`/`show` calls are deprecated as of 4.20 and marked for removal. The SDK is pinned to
-the exact version on both platforms: an ad SDK that moves between two builds is
-a bug report you cannot reproduce.
-
-The JavaScript side is `src/ads.ts`, reached through
-`Capacitor.registerPlugin('UnityAds')` for the same no-bundler reason as the
-other plugins. Every plugin call resolves when Unity says it is done rather
-than when it is issued — `showInterstitial` resolves when the ad is
-*dismissed* — so the game can await it before moving on.
-
-**Checked so far:** the Android half compiles against the real Unity 4.20.1
-and Capacitor 7.6.9 jars, with no deprecation warnings. The iOS half is
-written against the exact signatures in Unity 4.20.1's `.swiftinterface`, but
-has not been compiled — that needs Xcode. If `pod install` or the build
-complains, the plugin is the first place to look.
+The package's JavaScript is a plain script defining `window.PoliteCarrotAds`.
+`scripts/sync-www.js` copies it out of `node_modules` to `vendor/unity-ads.js`
+(committed, because Pages serves the root) and `index.html` loads it before
+`js/app.js`. `cap sync` wires the native halves in like any other plugin.
 
 ### Analytics
 
@@ -541,17 +525,11 @@ the first ad request is personalised.
 with an empty `GAME_ID` behaves like the web one: no tracking prompt, no ad
 requests. There is nothing to ask permission to track for.
 
-**Unity has no consent form.**
-It takes the answers as two flags instead, sent before `initialize` and again
-whenever the answer changes:
+**Unity has no consent form.** The package sends one `granted` flag, before
+`initialize` and again whenever the answer changes: true only when the app's
+saved answer is yes **and** (on iOS) tracking is authorised.
 
-| Flag | Applies to | Sent as |
-|------|------------|---------|
-| `setUserConsent` | players Unity places in the EEA and the UK (GDPR) | **true** when tracking was allowed |
-| `setUserOptOut` | US state privacy laws ("do not sell or share") | **true** when it was not |
-
-Both follow the tracking answer, exactly as Color Sort's shared ad package
-sends them. Worth knowing: Apple's prompt is not, strictly, a GDPR consent
+Apple's prompt is not, strictly, a GDPR consent
 question, so treating Allow as consent in the EEA and the UK is a judgement
 both games share rather than something the prompt guarantees. A consent
 management platform (a TCF-registered CMP) is the fuller answer there, for
@@ -566,7 +544,7 @@ Two backends behind one call:
 
 | Platform | Route | Configured by |
 |----------|-------|---------------|
-| Web | GA4 web stream, `gtag.js` | `MEASUREMENT_ID` in `track.ts` — **empty**, so the web build is inert |
+| Web | GA4 web stream, `gtag.js` | `MEASUREMENT_ID` in `track.js` — **empty**, so the web build is inert |
 | iOS, Android | Firebase, `@capacitor-firebase/analytics` | `GoogleService-Info.plist`, `google-services.json` |
 
 Five events, named to match the sort game's so a funnel reads across both:
@@ -585,10 +563,13 @@ the only way to find out short of watching somebody play all hundred.
 
 **Nothing starts collecting before the answer.** Firebase begins the moment
 its SDK loads, which is before any sheet appears, so the Android manifest and
-the iOS plist ship it *deactivated* and `track.ts` turns it on through the
-plugin afterwards. That is two flips, not one: the deactivation flag stops the
-process starting at boot, and the Consent Mode v2 grants are what Analytics
-reads on every event once it has. Setting one without the other looks like it
+the iOS plist ship it with `firebase_analytics_collection_enabled` /
+`FIREBASE_ANALYTICS_COLLECTION_ENABLED` **false** — never the `_DEACTIVATED`
+flag, which is permanent and makes every later `setEnabled` a silent no-op —
+and `track.js` turns it on through the plugin afterwards. That is two flips,
+not one: the enabled switch, and the Consent Mode v2 grants (one
+`setConsent({ type, status })` call per type) that Analytics reads on every
+event. Setting one without the other looks like it
 worked and sends nothing. Saying no to personalised ads denies the three
 ad-related grants while analytics stays granted — one no does not have to mean
 two.
@@ -598,23 +579,19 @@ with the script blocked by an ad blocker, `event()` does nothing and throws
 nothing, and the native call is never awaited by anything the player is
 waiting on. Analytics failing must not cost somebody their game.
 
-**The two config files are not in this repository** — they are per-app, they
-are yours, and they are gitignored:
+**The two config files are committed**, as in color-sorting — Firebase project
+`color-flood-730d7`, app `com.politecarrot.colorflood` on both platforms:
 
 ```
 android/app/google-services.json
-ios/App/App/GoogleService-Info.plist
+ios/App/App/GoogleService-Info.plist   (also registered in project.pbxproj)
 ```
 
-`npm run sync` **refuses to run without them**, which is deliberate rather
+`cap sync` **refuses to run without them**, which is deliberate rather
 than fussy: the iOS plugin calls `FirebaseApp.configure()` from its `load()`,
 `load()` runs at bridge startup, and an app bundled without its plist does not
-fail to build and does not fail to report — it CRASHES on launch, on the
-tester's phone, naming a file that is nowhere in this repository. Use
-`ALLOW_NO_FIREBASE=1 npm run sync` to build without it on purpose.
-
-Android degrades quietly instead: Capacitor's own `build.gradle` applies the
-google-services plugin only if the JSON is there.
+fail to build and does not fail to report — it CRASHES on launch. Use
+`ALLOW_NO_FIREBASE=1 npx cap sync` to go ahead without them on purpose.
 
 #### The interstitial
 
@@ -648,45 +625,37 @@ Gate.shown(now)    an ad was shown; both counters restart
 
 The gate is deliberately separable from the plugin: it is arithmetic over two
 numbers, it is the part that was actually specified, and it is the part with a
-test. `src/ads.test.ts` checks both halves of the "and" — fast wins do not
+test. `test/ads.test.js` checks both halves of the "and" — fast wins do not
 fire, a long idle with no wins does not fire — and that showing one restarts
 both counters so a second cannot follow it immediately. The threshold itself
 is asserted, so changing the cadence is a deliberate edit rather than a
 drift. It is one number for iOS and Android alike.
 
-**Nothing about an ad can hold up the game.** Three fail-safes, all in
-`maybeShow`, and all tested against a stand-in plugin on a fake clock:
+**Nothing about an ad can hold up the game**, all in `maybeShow` and tested
+against the real package over a stand-in native bridge on a fake clock:
 
 | If… | Then |
 |-----|------|
 | no ad is loaded yet when one is due | it is **skipped at once** — the next puzzle opens without waiting, and a load starts for the next seam |
-| the ad has not appeared within **5 seconds** | the game gives up on it and carries on; the count is not reset, so the next seam tries again |
-| the ad appeared but never reports being closed | the game carries on after **2 minutes** — far longer than any real ad, a backstop against a lost callback |
-| loading or showing fails outright | nothing is shown and the game carries on |
-
-The native plugin sends `interstitialStarted` the moment an ad is on screen,
-which is what tells the first two cases apart. An ad counts as seen from that
-moment, so one that is up but never reports closing still restarts the
-clock. The one thing the game cannot do is cancel an ad that turns up after
-it has been given up on — if that ever happens it appears over the next
-puzzle, which waits underneath until it is closed.
+| the ad never reports being closed | the game carries on after **2 minutes** (`CLOSE_TIMEOUT_MS`) — a backstop against a lost callback; the package's own `showing` flag still stops a second ad stacking |
+| loading or showing fails outright | nothing is shown, the count is not reset, and the game carries on |
 
 **Unity has no test IDs.** Test mode is a flag sent alongside the real Game
 ID, and while it is on Unity serves its own test creatives: nothing is earned,
 and nothing a developer taps counts against the account. `TEST_MODE` in
-`src/ads.ts` is **true** in every commit until the one that makes the store
-build. The Unity dashboard can also force test mode per platform, which is
-the safer switch if it is ever in doubt.
+`js/ads.js` is **false**: every build serves **live ads**. To test safely,
+register your devices as test devices in the Unity dashboard (or force test
+mode per platform there) — never tap your own live ads.
 
-Setting it up, in `src/ads.ts`:
+Setting it up, in `js/ads.js`:
 
 | Constant | What goes in it |
 |----------|-----------------|
 | `GAME_ID` | the **Game IDs** from the Unity dashboard — iOS `800385205`, Android `800386041`; empty means inert |
 | `PLACEMENT` | the interstitial's **Placement ID** for each platform — `BP_Interstitial_iOS`, `BP_Interstitial_Android` |
-| `TEST_MODE` | `true` for development and TestFlight, `false` for the store build |
+| `TEST_MODE` | `false` — live ads in every build |
 
-And for the web build only, `MEASUREMENT_ID` in `src/track.ts` — the GA4
+And for the web build only, `MEASUREMENT_ID` in `js/track.js` — the GA4
 **web** stream id. There are no ad IDs in the Android manifest or the iOS
 plist any more: Unity reads everything from `initialize`.
 
@@ -787,38 +756,40 @@ from, and `git push` is the deploy.
 | Path | What it is |
 |------|------------|
 | `index.html`, `styles.css`, `fonts.css`, `assets/` | The page. Hand-written, and served as they are. `assets/icon.png` and `assets/splash.png` are the sources every native icon is generated from. |
-| `js/` | **Generated** from `src/` by `npm run build`. Committed, and never edited by hand. |
-| `src/generator.ts` | The generator and the solver. No imports, no DOM, no `Math.random`. |
-| `src/play.ts` | The rules: what the blob is, what a move does, undo. |
-| `src/levels.ts` | The five settings per game, and which puzzle today's is. |
-| `src/campaign.ts` | The hand-drawn levels and the ramp behind them. |
+| `js/` | The game, in plain JavaScript ES modules. This is the source — edit it directly. |
+| `js/generator.js` | The generator and the solver. No imports, no DOM, no `Math.random`. |
+| `js/play.js` | The rules: what the blob is, what a move does, undo. |
+| `js/levels.js` | The five settings per game, and which puzzle today's is. |
+| `js/campaign.js` | The hand-drawn levels, the ramp behind them, and the star rating. |
 | `android/`, `ios/` | Capacitor projects, ready to open in Android Studio and Xcode. |
-| `src/palette.ts` | What a color index looks like. The generator never sees it. |
-| `src/app.ts` | The browser build. |
-| `src/sound.ts` | The blips. With `app.ts`, the only files in `src/` that know a DOM exists. |
-| `src/share.ts` | A finished daily, as three lines you can paste. Pure, so it has a test. |
-| `src/haptics.ts` | The taps you feel. The same three moments the sound marks, native only. |
-| `src/ads.ts` | When an interstitial is allowed to appear, and the Unity calls that show it. A no-op off a phone. |
-| `plugins/unity-ads/` | The Capacitor plugin for Unity Ads — Java for Android, Swift for iOS. |
-| `src/track.ts` | Consented analytics: GA4 on the web, Firebase on a phone. Inert until somebody says yes. |
-| `src/cli.ts` | Deals a board and prints it to a terminal. |
+| `js/palette.js` | What a color index looks like. The generator never sees it. |
+| `js/app.js` | The browser build. |
+| `js/sound.js` | The blips. With `app.js`, the only files in `js/` that know a DOM exists. |
+| `js/share.js` | A finished daily, as three lines you can paste. Pure, so it has a test. |
+| `js/haptics.js` | The taps you feel. The same three moments the sound marks, native only. |
+| `js/ads.js` | When an interstitial is allowed to appear, and the Unity calls that show it. A no-op off a phone. |
+| `vendor/unity-ads.js` | The shared `@politecarrot/capacitor-unity-ads` client, copied from `node_modules` by `scripts/sync-www.js`. |
+| `capacitor.config.js` | App id/name, and the hook that regathers `www/` before every `cap` command. |
+| `js/track.js` | Consented analytics: GA4 on the web, Firebase on a phone. Inert until somebody says yes. |
+| `test/` | The tests (Vitest), importing straight from `js/`. |
+| `scripts/gen.js` | Deals a board and prints it to a terminal. |
 
 The levels grid pages by the hundred. All thousand tiles at once took 806ms
 to build and made a 12,458px scroll — a pause on the way in, then a lot of
 flicking to reach 640. A hundred paints in a fraction of that over 1,245px,
 and the screen opens on whichever page holds the furthest level reached.
 
-`generator.ts`, `play.ts`, `levels.ts`, `campaign.ts` and `palette.ts` are all
+`generator.js`, `play.js`, `levels.js`, `campaign.js` and `palette.js` are all
 pure — no DOM, no storage, no clock — which is the point: a React Native build
-takes those five as they are and rewrites only `app.ts` and `sound.ts`. `generator.ts` in particular imports nothing at all,
+takes those five as they are and rewrites only `app.js` and `sound.js`. `generator.js` in particular imports nothing at all,
 and a test enforces it — the check strips the comments first, because the
 comments discuss `Math.random` at some length and a check that reads them
 finds exactly what it was written to forbid.
 
 The generator deals in color *indices*; what index 2 looks like is
-`palette.ts`'s business, and the palette is the sort game's, hex for hex.
+`palette.js`'s business, and the palette is the sort game's, hex for hex.
 
-```ts
+```js
 generate(opts: GenOptions): Level
 solve(level: Level, cap?: number): number | null
 bandRadius(width, height, origin): number
@@ -902,7 +873,7 @@ the same board on every machine, this year and next — which is the whole
 requirement for a daily puzzle, where the seed is the date and two people on
 opposite sides of the world have to be playing the same thing.
 
-There is no `Math.random` anywhere in `generator.ts`, and a test enforces it by
+There is no `Math.random` anywhere in `generator.js`, and a test enforces it by
 breaking `Math.random` and dealing a board anyway.
 
 ## Running it
@@ -911,39 +882,21 @@ breaking `Math.random` and dealing a board anyway.
 npm install
 npm test
 npm run gen -- --w 9 --h 7 --moves 3 --seed 2026-09-07   # a board in the terminal
-npm run build && npm run serve                            # the game, on :8080
+npm run serve                                             # the game, on :8080
 ```
 
-There is no bundler and no framework. `npm run build` runs `tsc` over `src/`
-into `js/` as plain ES modules; `index.html` loads `js/app.js` as a module and
-the browser follows the imports from there. The whole site is about 390 KB,
+There is no bundler, no framework and no build step. `js/` is plain ES
+modules; `index.html` loads `js/app.js` as a module and the browser follows
+the imports from there, and the tests and `scripts/gen.js` import the very
+same files. The whole site is about 390 KB,
 and 244 KB of that is the two fonts, inlined as data URIs so the page fetches
 nothing at all.
-
-The source imports say `./generator.ts`, which is what lets Node run the CLI
-and the tests straight from source with no build. `rewriteRelativeImportExtensions`
-turns them into `./generator.js` on the way out, which is what the browser
-needs. Both are true at once, and neither is a copy of the other.
 
 ## Deploying
 
 `git push` to `main`. That is the whole of it — Pages serves this branch's
-root, so pushing the root publishes it.
-
-Which is why **`js/` is committed**, and that is worth being upfront about
-because generated files in git are normally a mistake. Publishing straight
-from a branch means there is no build step between the branch and the URL, so
-whatever the browser needs has to be *in* the branch. The alternative is
-setting the Pages source to GitHub Actions and letting a workflow build and
-upload — cleaner in git, one setting to get right, and that setting is admin
-only.
-
-The cost of this way is drift: `js/` can fall behind `src/`, and a drifted
-`js/` is a stale game at the URL with a perfectly green repository behind it.
-So `.github/workflows/pages.yml` rebuilds on every push and fails if what is
-committed differs from what `src/` compiles to. **Run `npm run build` and
-commit `js/` whenever you change `src/`** — or CI will tell you that you
-forgot.
+root, so pushing the root publishes it. `.github/workflows/pages.yml` runs the
+tests and then checks the URL is serving the game.
 
 `.nojekyll` at the root turns off Jekyll. Without it Pages runs the tree
 through Jekyll on its way out, which among other things drops anything whose
@@ -1040,7 +993,7 @@ found: on the first launch after updating, it is carried into native storage
 automatically. At boot the native copy wins whenever there is one; if the
 native read fails, or takes more than three seconds, the game starts from the
 local copy rather than wait. Nothing can be tapped until the save is in.
-`src/store.test.ts` covers every way the two copies can disagree.
+`test/store.test.js` covers every way the two copies can disagree.
 
 Tapping a **cell** plays that cell's color, which on a phone is much the
 fastest way in — you point at the region you want rather than hunting for it
