@@ -37,7 +37,7 @@ function closeOverlay(id) { $(id).hidden = true; }
 const blankRun = () => new Array(CAMPAIGN_LENGTH).fill(0);
 const blankProgress = () => ({ best: blankRun(), par: blankRun() });
 const DEFAULTS = {
-    sound: true, marks: true, buzz: true, days: [], difficulty: 'easy', mode: 'flood',
+    sound: true, marks: false, buzz: true, days: [], difficulty: 'easy', mode: 'flood',
     progress: { flood: blankProgress(), merge: blankProgress() },
     ads: null, stats: null,
 };
