@@ -266,6 +266,18 @@
         <span>Color Blind Assist</span>
         <button id="set-marks" class="btn" type="button" aria-pressed="false">Off</button>
       </div>
+      <!-- Reminders exist only in the app: both rows stay hidden on the web. -->
+      <div id="set-remind-row" class="settings-row settings-row--stack" hidden>
+        <div>
+          <b>Daily reminder</b>
+          <p id="set-remind-note" class="settings-row__note">One notification when the daily puzzle is ready. Skipped on days you have already done it.</p>
+        </div>
+        <button id="set-remind" class="btn" type="button" aria-label="Daily reminder" aria-pressed="false">Off</button>
+      </div>
+      <div id="set-remind-time-row" class="settings-row" hidden>
+        <label for="set-remind-time">Remind me at</label>
+        <select id="set-remind-time" class="settings-select"></select>
+      </div>
       <div class="settings-row">
         <span>Privacy choices</span>
         <button id="set-privacy" class="btn" type="button">Open&hellip;</button>
@@ -278,6 +290,23 @@
     <p class="modal__note" id="settings-note"></p>
     <div class="modal__actions">
       <button data-close="overlay-settings" class="btn btn--primary">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Offered once: after the first daily, or after ten finished puzzles. -->
+<div id="overlay-reminder" class="overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reminder-title">
+    <h2 id="reminder-title">Daily reminder?</h2>
+    <p id="reminder-lead" class="modal__line" hidden></p>
+    <p class="modal__line">
+      One notification a day when the new daily puzzle is ready, at
+      <span id="reminder-time">6pm</span>. None on days you have already
+      done it. Change it or turn it off any time in Settings.
+    </p>
+    <div class="modal__actions">
+      <button id="reminder-yes" class="btn btn--primary" type="button">Remind me</button>
+      <button id="reminder-no" class="btn btn--quiet" type="button">Not now</button>
     </div>
   </div>
 </div>

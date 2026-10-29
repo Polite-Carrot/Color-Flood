@@ -12,6 +12,7 @@ dependencies {
     implementation project(':capacitor-firebase-analytics')
     implementation project(':capacitor-app')
     implementation project(':capacitor-haptics')
+    implementation project(':capacitor-local-notifications')
     implementation project(':capacitor-preferences')
     implementation project(':politecarrot-capacitor-unity-ads')
 

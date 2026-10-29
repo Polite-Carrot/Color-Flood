@@ -766,6 +766,7 @@ from, and `git push` is the deploy.
 | `js/app.js` | The browser build. |
 | `js/sound.js` | The blips. With `app.js`, the only files in `js/` that know a DOM exists. |
 | `js/share.js` | A finished daily, as three lines you can paste. Pure, so it has a test. |
+| `js/reminders.js` | The daily reminder: local notifications for the next seven days, rebuilt on launch, resume and every finished daily. The plan is pure, so it has a test. |
 | `js/haptics.js` | The taps you feel. The same three moments the sound marks, native only. |
 | `js/ads.js` | When an interstitial is allowed to appear, and the Unity calls that show it. A no-op off a phone. |
 | `vendor/unity-ads.js` | The shared `@politecarrot/capacitor-unity-ads` client, copied from `node_modules` by `scripts/sync-www.js`. |
@@ -865,6 +866,60 @@ uses; the clipboard where it does not, which is every Android web view.
 Cancelling the sheet throws `AbortError`, and that is somebody saying no
 rather than something failing, so it does not fall through to quietly copying
 instead.
+
+### The daily reminder
+
+One notification a day, when the daily puzzle is ready. Ported from Color
+Match & Merge, and built the same way: **local notifications**
+(`@capacitor/local-notifications`), so there is no push server, no Firebase
+Cloud Messaging, no APNs key and no store setup. The phone deals the daily
+from the date, so the phone can schedule its own reminder.
+
+It is not one repeating alarm, because a repeating alarm cannot skip a day.
+The next seven days are scheduled one by one, and every launch, every return
+to the foreground and every finished daily cancels them all and schedules
+them again. So today's reminder goes as soon as today's daily is done, and
+somebody who stops playing hears from the game for a week and then never.
+
+What it says, at the time the player picked (6pm unless changed):
+
+```
+Daily puzzle
+Your daily puzzle is ready. Keep your 5-day streak alive! 🔥
+```
+
+The streak line appears only on the **next** reminder to fire, and only for a
+streak of two or more; every other day says `A new daily puzzle is ready.` By
+the reminder after next the player may have missed a day, and a notification
+promising a streak that has already gone is worse than one that does not
+mention it. The number comes from `streakOf()`, the same arithmetic as the
+calendar.
+
+**Asking.** Permission is asked only after **Remind me**, never at launch:
+iOS shows that system prompt once per install. The offer comes once, at
+whichever comes first: the first daily done, or ten puzzles finished anywhere
+(campaign levels, dailies and random wins — `saved.randomWins` exists for
+this). It waits until the win card and any ad have gone. If the system has
+already said no, the offer is not shown, and Settings says where to turn
+notifications back on.
+
+**Settings** has the switch and a time picker, 7am to 10pm. Both rows are
+hidden on the web, where there is nothing to notify with. The choice lives in
+the save as `saved.reminder` (`on`, `asked`, `hour`), and **Reset progress
+leaves it alone**: it is a setting, not progress.
+
+**Tapping** a reminder opens the daily calendar, unless a puzzle is being
+played, which is left alone.
+
+**Android:** the alarms are inexact (`isExactNotification: false`), and the
+manifest removes the `SCHEDULE_EXACT_ALARM` permission the plugin declares.
+That permission is off by default on Android 14+, and Google Play asks apps
+that keep it to justify it. Notifications go to a "Daily puzzle" channel with
+a white status-bar icon, `res/drawable/ic_stat_daily.xml`: a board with the
+flood stepping out from its corner.
+
+`test/reminders.test.js` covers the plan, the wording, the one-time offer,
+the permission paths and the web.
 
 ## Seeds
 

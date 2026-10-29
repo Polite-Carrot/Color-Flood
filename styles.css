@@ -1142,6 +1142,26 @@ input:focus-visible {
   line-height: 1.15;
 }
 .settings-row .btn { padding: 8px 16px; font-size: 16px; flex: none; }
+/* The reminder time. The label reads like every other row's name, and the
+   picker sits where a switch would. */
+.settings-row > label {
+  font-family: "Baloo 2", sans-serif;
+  font-weight: 800;
+  font-size: 17px;
+  line-height: 1.15;
+}
+.settings-select {
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--paper);
+  border: var(--stroke) solid var(--ink);
+  border-radius: 10px;
+  padding: 7px 10px;
+  min-width: 96px;
+  flex: none;
+}
 .settings-row .btn[aria-pressed="true"] { background: var(--gold); }
 
 /* A row whose choice needs a sentence to be a fair question. "Personalized

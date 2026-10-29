@@ -18,6 +18,7 @@ import { Ads } from "./ads.js";
 import { Track } from "./track.js";
 import { shareText } from "./share.js";
 import { persist, readLocal, restore } from "./store.js";
+import { HOURS, Reminders, hourLabel, readReminder } from "./reminders.js";
 /* ------------------------------------------------------------------ scaffolding */
 const $ = (id) => {
     const el = document.getElementById(id);
@@ -40,6 +41,13 @@ const DEFAULTS = {
     sound: true, marks: false, buzz: true, days: [], difficulty: 'easy', mode: 'flood',
     progress: { flood: blankProgress(), merge: blankProgress() },
     ads: null, stats: null,
+    /* The daily reminder's on/off, hour, and whether it has been offered. A
+       setting, not progress: Reset progress leaves it alone. */
+    reminder: readReminder(null),
+    /* Random boards won. The campaigns and the calendar already record
+       themselves; this is the one kind of finished puzzle nothing else counts,
+       and the reminder offer after ten finished puzzles needs all of them. */
+    randomWins: 0,
 };
 /* Read a saved campaign back defensively. A run that is the wrong length —
    an older save, or a newer one from a longer campaign — is padded or cut
@@ -89,6 +97,8 @@ function parse(raw) {
                the sheet once rather than never. */
             ads: typeof got.ads === 'boolean' ? got.ads : null,
             stats: typeof got.stats === 'boolean' ? got.stats : null,
+            reminder: readReminder(got.reminder),
+            randomWins: Number.isInteger(got.randomWins) && got.randomWins > 0 ? got.randomWins : 0,
         };
     }
     catch {
@@ -395,8 +405,16 @@ function finish() {
         return;
     const { game, kind, setting, day, campaign, hintsLeft } = session;
     const used = game.played.length;
-    if (kind === 'daily')
+    if (kind === 'daily') {
         recordDaily(day);
+        /* Today's reminder goes once today is done, and the streak in
+           tomorrow's wording moves on by one. */
+        void Reminders.sync();
+    }
+    if (kind === 'random') {
+        saved.randomWins += 1;
+        save();
+    }
     if (campaign) {
         const run = saved.progress[campaign.mode];
         /* Keep the best, so replaying a level worse than before does not undo the
@@ -843,8 +861,10 @@ function wire() {
        being played, and the awaits are no-ops on the web build. */
     $('win-again').addEventListener('click', async () => {
         closeOverlay('overlay-win');
+        const was = session?.kind;
         await Ads.maybeShow();
         dealRandom($('again'));
+        void maybeOfferReminder(was);
     });
     $('win-next').addEventListener('click', async () => {
         closeOverlay('overlay-win');
@@ -852,6 +872,7 @@ function wire() {
         await Ads.maybeShow();
         if (at)
             playCampaign(at.mode, at.n + 1, $('win-next'));
+        void maybeOfferReminder('campaign');
     });
     $('win-retry').addEventListener('click', async () => {
         closeOverlay('overlay-win');
@@ -864,6 +885,7 @@ function wire() {
         Track.event('puzzle_start', where());
         paint();
         say('');
+        void maybeOfferReminder(session.kind);
     });
     $('win-home').addEventListener('click', async () => {
         closeOverlay('overlay-win');
@@ -875,6 +897,20 @@ function wire() {
         }
         else
             show('screen-home');
+        void maybeOfferReminder(was?.kind);
+    });
+    /* The offer. Permission is asked here, after "Remind me", and nowhere
+       before it. */
+    $('reminder-yes').addEventListener('click', async () => {
+        closeOverlay('overlay-reminder');
+        const result = await Reminders.enable();
+        if (result === 'on')
+            Track.event('daily_reminder', { on: true, hour: saved.reminder.hour, from: 'offer' });
+    });
+    $('reminder-no').addEventListener('click', () => closeOverlay('overlay-reminder'));
+    $('set-remind').addEventListener('click', toggleReminder);
+    $('set-remind-time').addEventListener('change', (e) => {
+        void Reminders.setHour(e.target.value);
     });
     for (const id of ['privacy-stats']) {
         $(id).addEventListener('click', () => {
@@ -911,7 +947,11 @@ function wire() {
        looking at a board they cannot read, and making them back out to the home
        screen to find it is making them do it blind. */
     for (const id of ['settings', 'game-settings']) {
-        $(id).addEventListener('click', () => { paintSettings(); openOverlay('overlay-settings'); });
+        $(id).addEventListener('click', () => {
+            paintSettings();
+            openOverlay('overlay-settings');
+            void checkReminderPermission();
+        });
     }
     for (const btn of document.querySelectorAll('[data-close]')) {
         btn.addEventListener('click', () => closeOverlay(btn.dataset.close));
@@ -967,7 +1007,11 @@ function wire() {
         }
         saved.progress = { flood: blankProgress(), merge: blankProgress() };
         saved.days = [];
+        saved.randomWins = 0;
         save();
+        /* The reminder is a setting, not progress, so it stays as it was; only
+           its wording changes, now there is no streak to keep. */
+        void Reminders.sync();
         disarm();
         $('settings-note').textContent = 'Progress erased.';
     });
@@ -996,7 +1040,7 @@ function wire() {
     });
     window.addEventListener('keydown', (e) => {
         if (!$('overlay-win').hidden || !$('overlay-howto').hidden || !$('overlay-settings').hidden
-            || !$('overlay-privacy').hidden) {
+            || !$('overlay-privacy').hidden || !$('overlay-reminder').hidden) {
             if (e.key === 'Escape')
                 goBack();
             return;
@@ -1152,7 +1196,7 @@ function goBack() {
     /* The privacy sheet is deliberately not in this list. Dismissing it with
        neither answer recorded means asking again next launch, which teaches
        people to dismiss it faster. */
-    for (const id of ['overlay-win', 'overlay-howto', 'overlay-settings']) {
+    for (const id of ['overlay-reminder', 'overlay-win', 'overlay-howto', 'overlay-settings']) {
         if (!$(id).hidden) {
             closeOverlay(id);
             return true;
@@ -1252,6 +1296,95 @@ function paintSettings() {
         $(id).textContent = on ? 'On' : 'Off';
         $(id).setAttribute('aria-pressed', String(on));
     }
+    paintReminder();
+}
+/* ------------------------------------------------------------------ the daily reminder */
+/* The Settings rows. Hidden on the web, where there is nothing to notify
+   with; the time only shows once reminders are on. */
+function paintReminder() {
+    const show = Reminders.available();
+    const r = saved.reminder;
+    $('set-remind-row').hidden = !show;
+    $('set-remind-time-row').hidden = !show || !r.on;
+    if (!show)
+        return;
+    $('set-remind').textContent = r.on ? 'On' : 'Off';
+    $('set-remind').setAttribute('aria-pressed', String(r.on));
+    const pick = $('set-remind-time');
+    if (!pick.options.length) {
+        for (const h of HOURS)
+            pick.append(new Option(hourLabel(h), String(h)));
+    }
+    /* An hour outside the list (a save from a build that offered more) still
+       shows as what it is rather than as the first option. */
+    if (!HOURS.includes(r.hour) && ![...pick.options].some((o) => o.value === String(r.hour))) {
+        pick.append(new Option(hourLabel(r.hour), String(r.hour)));
+    }
+    pick.value = String(r.hour);
+}
+const REMIND_NOTE = 'One notification when the daily puzzle is ready. Skipped on days you have already done it.';
+const REMIND_BLOCKED = "Notifications are turned off for Color Flood. Allow them in your phone's Settings app, then switch this on.";
+/* The system switch can change while the game is closed. If notifications
+   were turned off there, say so beside the switch rather than showing On for
+   reminders that cannot arrive. */
+async function checkReminderPermission() {
+    if (!Reminders.available())
+        return;
+    const p = await Reminders.permission();
+    $('set-remind-note').textContent = p === 'denied' ? REMIND_BLOCKED : REMIND_NOTE;
+}
+async function toggleReminder() {
+    const btn = $('set-remind');
+    btn.disabled = true;
+    try {
+        if (saved.reminder.on) {
+            await Reminders.disable();
+            Track.event('daily_reminder', { on: false });
+        }
+        else {
+            const result = await Reminders.enable();
+            $('set-remind-note').textContent = result === 'denied' ? REMIND_BLOCKED : REMIND_NOTE;
+            if (result === 'on')
+                Track.event('daily_reminder', { on: true, hour: saved.reminder.hour, from: 'settings' });
+        }
+    }
+    finally {
+        btn.disabled = false;
+        paintReminder();
+    }
+}
+/* Every puzzle finished: campaign levels done, dailies done, random wins. */
+const OFFER_AFTER = 10;
+function puzzlesFinished() {
+    let n = saved.days.length + saved.randomWins;
+    for (const mode of ['flood', 'merge'])
+        n += saved.progress[mode].best.filter((b) => b > 0).length;
+    return n;
+}
+/* Offered once per install, at whichever comes first: the first daily done
+   (the reminder is about the daily, so that is when it means most), or ten
+   puzzles finished anywhere (somebody who has stuck around but not found the
+   daily yet). Called once the win card has closed and any ad has gone, so it
+   is never on top of either — and never at launch. */
+async function maybeOfferReminder(kind) {
+    const daily = kind === 'daily';
+    if (!daily && puzzlesFinished() < OFFER_AFTER)
+        return;
+    if (!(await Reminders.shouldOffer()))
+        return;
+    for (const id of ['overlay-win', 'overlay-settings', 'overlay-privacy', 'overlay-howto']) {
+        if (!$(id).hidden)
+            return;
+    }
+    Reminders.markOffered();
+    const lead = $('reminder-lead');
+    lead.hidden = daily;
+    lead.textContent = daily ? ''
+        : puzzlesFinished() + ' puzzles done, nice work! There is a new daily puzzle every day too.';
+    $('reminder-time').textContent = hourLabel(saved.reminder.hour);
+    openOverlay('overlay-reminder');
+    $('reminder-yes').focus();
+    Track.event('reminder_offer', { from: daily ? 'daily' : 'levels' });
 }
 /* Everything waits for the native copy of the save first — the buttons
    included, so nothing can be tapped against a save about to be replaced. On
@@ -1261,7 +1394,32 @@ async function boot() {
     Object.assign(saved, parse(await restore()));
     Sound.on = saved.sound;
     Haptics.on = saved.buzz;
+    /* The reminder keeps its choice in the save, under saved.reminder, and
+       reads the streak from the same days the calendar does. */
+    Reminders.use({
+        read: () => saved.reminder,
+        write: (r) => { saved.reminder = r; save(); paintReminder(); },
+        solved: () => new Set(saved.days),
+    });
     wire();
+    /* A tapped reminder opens the daily calendar — unless a puzzle is being
+       played, which is left alone rather than thrown away. */
+    Reminders.onOpen(() => {
+        if ($('screen-game').classList.contains('is-active'))
+            return;
+        for (const id of ['overlay-reminder', 'overlay-howto', 'overlay-settings'])
+            closeOverlay(id);
+        shownMonth = new Date();
+        paintDailyScreen();
+        show('screen-daily');
+    });
+    /* Launch and every return to the foreground: a new day may have started
+       while the game sat in the background. */
+    void Reminders.sync();
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible')
+            void Reminders.sync();
+    });
     paintRandomScreen();
     paintHome();
     /* Carries the saved answers into analytics and the ad flags before
