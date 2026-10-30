@@ -24,6 +24,10 @@ public class MainActivity extends BridgeActivity {
      */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // App-local plugins must be registered before the bridge starts. This
+        // one opens the notification settings once Android has stopped
+        // showing the permission prompt (js/reminders.js, openSettings).
+        registerPlugin(NotificationSettingsPlugin.class);
         super.onCreate(savedInstanceState);
         if (getResources().getBoolean(R.bool.lock_portrait)) {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);

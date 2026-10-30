@@ -380,6 +380,22 @@ input:focus-visible {
   gap: 10px;
   margin-top: clamp(12px, 3vh, 30px);
 }
+/* Remove Ads on the home footer. Three buttons only fit two to a row on a
+   phone; on a short one (iPhone SE and the like) the third row would land
+   below the fold, so there they stay on one row with "No ads" for "Remove
+   ads". Same rule as the sort game. */
+#home-remove-ads[hidden] { display: none; }
+#home-remove-ads .ra-short { display: none; }
+@media (max-height: 760px) and (max-width: 560px) {
+  #screen-home .menu-foot { flex-wrap: nowrap; gap: 8px; }
+  #screen-home .menu-foot .btn { font-size: 14px; padding: 9px 12px; white-space: nowrap; }
+  #home-remove-ads .ra-long { display: none; }
+  #home-remove-ads .ra-short { display: inline; }
+}
+@media (max-height: 760px) and (max-width: 340px) {
+  #screen-home .menu-foot { gap: 6px; }
+  #screen-home .menu-foot .btn { font-size: 13px; padding: 8px 9px; }
+}
 
 /* ───────── sub screens ───────── */
 
@@ -1142,26 +1158,17 @@ input:focus-visible {
   line-height: 1.15;
 }
 .settings-row .btn { padding: 8px 16px; font-size: 16px; flex: none; }
-/* The reminder time. The label reads like every other row's name, and the
-   picker sits where a switch would. */
-.settings-row > label {
-  font-family: "Baloo 2", sans-serif;
-  font-weight: 800;
-  font-size: 17px;
-  line-height: 1.15;
+/* The price button keeps its colour; the gold pressed state is for switches. */
+.settings-row .btn--primary:disabled { opacity: .6; }
+/* The quiet row under the Notifications switch: a sentence, not a setting,
+   so no card around it. A <p>, because .settings-row > span is a title. */
+.settings-row.settings-row--quiet {
+  border: none;
+  background: none;
+  padding: 0 14px 2px;
+  margin-top: -6px;
 }
-.settings-select {
-  font: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--ink);
-  background: var(--paper);
-  border: var(--stroke) solid var(--ink);
-  border-radius: 10px;
-  padding: 7px 10px;
-  min-width: 96px;
-  flex: none;
-}
+.settings-row--quiet[hidden] { display: none; }
 .settings-row .btn[aria-pressed="true"] { background: var(--gold); }
 
 /* A row whose choice needs a sentence to be a fair question. "Personalized

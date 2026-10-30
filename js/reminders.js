@@ -13,9 +13,12 @@
  *   - the streak in the wording is true on the day it arrives;
  *   - somebody who stops playing hears from the game for a week, then never.
  *
- * Permission is asked only after the player taps "Remind me" — in the offer
- * or in Settings — never at launch. iOS shows that system prompt once per
- * install, and spending it before anybody cares about the daily wastes it.
+ * Permission is asked once on first run, right after Apple's tracking prompt
+ * (the privacy sheet's Continue, in app.js). Players who answered that sheet
+ * before reminders existed get a one-time "Daily reminder?" offer instead.
+ * iOS shows the prompt once per install and Android at most twice, so after a
+ * refusal, switching reminders on opens the phone's notification settings.
+ * As in Color Match & Merge (the capacitor-game-services skill).
  *
  * Where the choice is kept is the app's business: it lives in the save
  * beside everything else (saved.reminder), and Reset progress leaves it be.
@@ -31,8 +34,6 @@ export const DAYS_AHEAD = 7;
    those are ever cancelled. */
 export const FIRST_ID = 7100;
 export const DEFAULT_HOUR = 18;
-/* The hours the Settings picker offers: 7am to 10pm. */
-export const HOURS = Array.from({ length: 16 }, (_, i) => 7 + i);
 const CHANNEL = 'daily';
 export const TITLE = 'Daily puzzle';
 export function bodyFor(streak) {
@@ -202,14 +203,18 @@ export function makeReminders() {
             solved = o.solved;
         },
         /* Turn reminders on, asking the system first if it has not been asked.
-           'on', 'denied' (blocked in the phone's settings — say where to change
-           it) or 'unavailable' (the web). */
+             'on'
+             'denied'      refused the prompt just shown
+             'blocked'     refused before, so no prompt can appear: call
+                           openSettings()
+             'unavailable' the web */
         async enable() {
             const LN = get();
             if (!LN)
                 return 'unavailable';
             let p = await permission();
-            if (p === 'prompt') {
+            const prompted = p === 'prompt';
+            if (prompted) {
                 try {
                     const r = await LN.requestPermissions();
                     p = r.display === 'granted' ? 'granted' : 'denied';
@@ -221,7 +226,23 @@ export function makeReminders() {
             const on = p === 'granted';
             write({ ...read(), on, asked: true });
             await sync();
-            return on ? 'on' : 'denied';
+            if (on)
+                return 'on';
+            return !prompted && p === 'denied' ? 'blocked' : 'denied';
+        },
+        /* After a refusal the system stops asking, so its Settings page is the
+           only place left to allow notifications. On iOS, Capacitor hands a
+           non-app navigation to the system (window.open would be blocked after
+           an await); on Android, the NotificationSettings plugin in
+           MainActivity opens the app's notification page. */
+        openSettings() {
+            if (platform() === 'ios') {
+                window.location.href = 'app-settings:';
+                return;
+            }
+            if (platform() !== 'android' || !window.Capacitor.registerPlugin)
+                return;
+            void window.Capacitor.registerPlugin('NotificationSettings').open().catch(() => { });
         },
         async disable() {
             write({ ...read(), on: false, asked: true });

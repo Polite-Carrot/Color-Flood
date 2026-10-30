@@ -70,6 +70,8 @@
     <footer class="menu-foot">
       <button id="how-to" class="btn btn--ghost">How to play</button>
       <button id="settings" class="btn btn--ghost">Settings</button>
+      <!-- App only: the store price goes in as text once the store answers. -->
+      <button id="home-remove-ads" class="btn btn--primary" type="button" hidden>Remove ads</button>
     </footer>
   </section>
 
@@ -266,17 +268,27 @@
         <span>Color Blind Assist</span>
         <button id="set-marks" class="btn" type="button" aria-pressed="false">Off</button>
       </div>
-      <!-- Reminders exist only in the app: both rows stay hidden on the web. -->
-      <div id="set-remind-row" class="settings-row settings-row--stack" hidden>
-        <div>
-          <b>Daily reminder</b>
-          <p id="set-remind-note" class="settings-row__note">One notification when the daily puzzle is ready. Skipped on days you have already done it.</p>
-        </div>
-        <button id="set-remind" class="btn" type="button" aria-label="Daily reminder" aria-pressed="false">Off</button>
+      <!-- Notifications exist only in the app: hidden on the web. The quiet
+           row under the switch appears only when the phone has notifications
+           turned off for the game. -->
+      <div id="set-remind-row" class="settings-row" hidden>
+        <span>Notifications</span>
+        <button id="set-remind" class="btn" type="button" aria-label="Notifications" aria-pressed="false">Off</button>
       </div>
-      <div id="set-remind-time-row" class="settings-row" hidden>
-        <label for="set-remind-time">Remind me at</label>
-        <select id="set-remind-time" class="settings-select"></select>
+      <div id="set-remind-note-row" class="settings-row settings-row--quiet" hidden>
+        <p id="set-remind-note" class="settings-row__note" aria-live="polite"></p>
+      </div>
+      <!-- Remove Ads exists only in the app: hidden on the web. -->
+      <div id="set-remove-ads-row" class="settings-row settings-row--stack" hidden>
+        <div>
+          <b>Remove ads</b>
+          <p id="set-remove-ads-note" class="settings-row__note" aria-live="polite">Pay once, no more ads. Stays removed if you reinstall or change phone.</p>
+        </div>
+        <button id="set-remove-ads" class="btn btn--primary" type="button">Remove</button>
+      </div>
+      <div id="set-restore-row" class="settings-row" hidden>
+        <span>Bought it already?</span>
+        <button id="set-restore" class="btn" type="button">Restore</button>
       </div>
       <div class="settings-row">
         <span>Privacy choices</span>
@@ -300,9 +312,9 @@
     <h2 id="reminder-title">Daily reminder?</h2>
     <p id="reminder-lead" class="modal__line" hidden></p>
     <p class="modal__line">
-      One notification a day when the new daily puzzle is ready, at
+      One notification a day when the new Daily Puzzle is ready, at
       <span id="reminder-time">6pm</span>. None on days you have already
-      done it. Change it or turn it off any time in Settings.
+      solved it. Turn it off any time in Settings.
     </p>
     <div class="modal__actions">
       <button id="reminder-yes" class="btn btn--primary" type="button">Remind me</button>

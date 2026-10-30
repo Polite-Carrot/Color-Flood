@@ -28,17 +28,20 @@ export function nativePrefs() {
     plugin = c && c.isNativePlatform && c.isNativePlatform() && c.registerPlugin ? c.registerPlugin('Preferences') : null;
     return plugin;
 }
-export function readLocal() {
+/* Every function takes the key last and defaults to the save's. The other
+   key in use is the Remove Ads cache (purchases.js), kept apart from the save
+   so that Reset progress can never touch something the player paid for. */
+export function readLocal(key = KEY) {
     try {
-        return localStorage.getItem(KEY);
+        return localStorage.getItem(key);
     }
     catch {
         return null;
     }
 }
-function writeLocal(raw) {
+function writeLocal(raw, key = KEY) {
     try {
-        localStorage.setItem(KEY, raw);
+        localStorage.setItem(key, raw);
     }
     catch { /* private browsing, or storage off */ }
 }
@@ -48,12 +51,12 @@ function writeLocal(raw) {
    carried into native storage so it is safe from then on. Anything going
    wrong on the native side falls back to the local copy: a save that cannot
    be read is never a reason the game cannot open. */
-export async function restore(prefs = nativePrefs(), local = readLocal(), timeoutMs = RESTORE_TIMEOUT_MS) {
+export async function restore(prefs = nativePrefs(), local = readLocal(), timeoutMs = RESTORE_TIMEOUT_MS, key = KEY) {
     if (!prefs)
         return local;
     try {
         const got = await Promise.race([
-            prefs.get({ key: KEY }),
+            prefs.get({ key }),
             new Promise((resolve) => setTimeout(() => resolve('slow'), timeoutMs)),
         ]);
         if (got === 'slow')
@@ -62,11 +65,11 @@ export async function restore(prefs = nativePrefs(), local = readLocal(), timeou
             /* Keep the second copy in step, so the synchronous read at the next
                launch starts from the same place. */
             if (got.value !== local)
-                writeLocal(got.value);
+                writeLocal(got.value, key);
             return got.value;
         }
         if (local !== null)
-            void prefs.set({ key: KEY, value: local }).catch(() => { });
+            void prefs.set({ key, value: local }).catch(() => { });
         return local;
     }
     catch {
@@ -76,8 +79,8 @@ export async function restore(prefs = nativePrefs(), local = readLocal(), timeou
 /* Both copies, every time. The native write is not awaited: nothing the
    player is doing should wait on a save, and the bridge keeps the writes in
    the order they were made. */
-export function persist(raw, prefs = nativePrefs()) {
-    writeLocal(raw);
+export function persist(raw, prefs = nativePrefs(), key = KEY) {
+    writeLocal(raw, key);
     if (prefs)
-        void prefs.set({ key: KEY, value: raw }).catch(() => { });
+        void prefs.set({ key, value: raw }).catch(() => { });
 }

@@ -18,7 +18,8 @@ import { Ads } from "./ads.js";
 import { Track } from "./track.js";
 import { shareText } from "./share.js";
 import { persist, readLocal, restore } from "./store.js";
-import { HOURS, Reminders, hourLabel, readReminder } from "./reminders.js";
+import { Reminders, hourLabel, readReminder } from "./reminders.js";
+import { Purchases } from "./purchases.js";
 /* ------------------------------------------------------------------ scaffolding */
 const $ = (id) => {
     const el = document.getElementById(id);
@@ -909,9 +910,9 @@ function wire() {
     });
     $('reminder-no').addEventListener('click', () => closeOverlay('overlay-reminder'));
     $('set-remind').addEventListener('click', toggleReminder);
-    $('set-remind-time').addEventListener('change', (e) => {
-        void Reminders.setHour(e.target.value);
-    });
+    $('set-remove-ads').addEventListener('click', () => void buyRemoveAds());
+    $('home-remove-ads').addEventListener('click', () => void buyFromHome());
+    $('set-restore').addEventListener('click', () => void restorePurchases());
     for (const id of ['privacy-stats']) {
         $(id).addEventListener('click', () => {
             /* The button carries the answer until Save is pressed, not the save —
@@ -934,7 +935,7 @@ function wire() {
            sheet later from Settings changes the answers, and applyConsent above
            has already carried them — there is nothing left to start. */
         if (first)
-            Ads.start();
+            void Ads.start().then(askForNotifications);
     });
     $('set-privacy').addEventListener('click', () => {
         closeOverlay('overlay-settings');
@@ -1297,41 +1298,168 @@ function paintSettings() {
         $(id).setAttribute('aria-pressed', String(on));
     }
     paintReminder();
+    paintPurchase();
 }
-/* ------------------------------------------------------------------ the daily reminder */
-/* The Settings rows. Hidden on the web, where there is nothing to notify
-   with; the time only shows once reminders are on. */
-function paintReminder() {
-    const show = Reminders.available();
-    const r = saved.reminder;
-    $('set-remind-row').hidden = !show;
-    $('set-remind-time-row').hidden = !show || !r.on;
+/* ------------------------------------------------------------------ remove ads */
+/* Ported from Color Match & Merge (the capacitor-game-services skill): one
+   purchase, two places to make it — the Settings row and the home footer —
+   and Restore beside it, which Apple requires. Everything is hidden on the
+   web, where there is no store. */
+const REMOVE_ADS_NOTE = 'Pay once, no more ads. Stays removed if you reinstall or change phone.';
+const PENDING_NOTE = 'Waiting for the payment to be approved. Ads switch off by themselves when it goes through.';
+function paintPurchase(message) {
+    const show = Purchases.available();
+    $('set-remove-ads-row').hidden = !show;
+    $('set-restore-row').hidden = !show;
+    paintHomeRemoveAds();
     if (!show)
         return;
-    $('set-remind').textContent = r.on ? 'On' : 'Off';
-    $('set-remind').setAttribute('aria-pressed', String(r.on));
-    const pick = $('set-remind-time');
-    if (!pick.options.length) {
-        for (const h of HOURS)
-            pick.append(new Option(hourLabel(h), String(h)));
+    const st = Purchases.status();
+    const btn = $('set-remove-ads');
+    const note = $('set-remove-ads-note');
+    if (st.owned) {
+        btn.textContent = 'Removed';
+        btn.disabled = true;
+        note.textContent = message || 'Thank you! Ads are gone for good.';
     }
-    /* An hour outside the list (a save from a build that offered more) still
-       shows as what it is rather than as the first option. */
-    if (!HOURS.includes(r.hour) && ![...pick.options].some((o) => o.value === String(r.hour))) {
-        pick.append(new Option(hourLabel(r.hour), String(r.hour)));
+    else if (st.pending) {
+        btn.textContent = 'Pending';
+        btn.disabled = true;
+        note.textContent = message || PENDING_NOTE;
     }
-    pick.value = String(r.hour);
+    else {
+        /* The price comes from the store, in the player's currency; "Remove"
+           until it has answered. */
+        btn.textContent = st.busy ? '\u2026' : (st.price || 'Remove');
+        btn.disabled = st.busy;
+        note.textContent = message || REMOVE_ADS_NOTE;
+    }
+    $('set-restore').disabled = st.busy || st.owned;
 }
-const REMIND_NOTE = 'One notification when the daily puzzle is ready. Skipped on days you have already done it.';
-const REMIND_BLOCKED = "Notifications are turned off for Color Flood. Allow them in your phone's Settings app, then switch this on.";
+/* The home footer button: the same purchase, one tap from the menu. Gone once
+   bought, after a moment's thanks; while a payment is pending it stays,
+   disabled, so the player can see it is in hand. */
+let homeThanksUntil = 0;
+function paintHomeRemoveAds() {
+    const btn = $('home-remove-ads');
+    if (!Purchases.available()) {
+        btn.hidden = true;
+        return;
+    }
+    const st = Purchases.status();
+    if (st.owned) {
+        const left = homeThanksUntil - Date.now();
+        btn.hidden = left <= 0;
+        btn.textContent = 'Thank you!';
+        btn.disabled = true;
+        if (left > 0)
+            setTimeout(paintHomeRemoveAds, left + 20);
+        return;
+    }
+    btn.hidden = false;
+    btn.disabled = st.busy || st.pending;
+    btn.textContent = '';
+    if (st.pending) {
+        btn.textContent = 'Pending';
+        return;
+    }
+    /* Two labels, and CSS shows the short one where the footer is tight. The
+       price is the store's text, so it goes in as text, never as markup. */
+    const long = document.createElement('span');
+    long.className = 'ra-long';
+    long.textContent = 'Remove ads';
+    const short = document.createElement('span');
+    short.className = 'ra-short';
+    short.textContent = 'No ads';
+    btn.append(long, short, document.createTextNode(st.busy ? '\u2026' : st.price ? ' \u00b7 ' + st.price : ''));
+}
+async function buyFromHome() {
+    const result = await Purchases.buy();
+    Track.event('remove_ads', { result, from: 'home' });
+    if (result === 'owned')
+        homeThanksUntil = Date.now() + 2500;
+    paintPurchase();
+    /* No room on the menu for an explanation: Settings has one, with Restore
+       beside it. */
+    if (result === 'failed' || result === 'pending') {
+        paintSettings();
+        paintPurchase(result === 'failed'
+            ? 'The purchase did not go through. Check your connection and try again. Bought it before? Tap Restore.'
+            : PENDING_NOTE);
+        openOverlay('overlay-settings');
+    }
+}
+async function buyRemoveAds() {
+    const result = await Purchases.buy();
+    Track.event('remove_ads', { result, from: 'settings' });
+    const message = {
+        owned: 'Thank you! Ads are gone for good.',
+        pending: PENDING_NOTE,
+        cancelled: undefined,
+        failed: 'The purchase did not go through. Check your connection and try again.',
+    }[result];
+    paintPurchase(message);
+}
+async function restorePurchases() {
+    const owned = await Purchases.restore();
+    Track.event('remove_ads_restore', { found: owned });
+    const ios = window.Capacitor?.getPlatform?.() === 'ios';
+    paintPurchase(owned
+        ? 'Restored. Ads are gone for good.'
+        : 'No Remove Ads purchase found for this ' + (ios ? 'Apple ID.' : 'Google account.'));
+}
+/* ------------------------------------------------------------------ the daily reminder */
+/* As in Color Match & Merge (the capacitor-game-services skill): one switch,
+   Notifications, and the reminder always at 6pm. Hidden on the web, where
+   there is nothing to notify with. */
+function paintReminder() {
+    const show = Reminders.available();
+    $('set-remind-row').hidden = !show;
+    if (!show) {
+        $('set-remind-note-row').hidden = true;
+        return;
+    }
+    const on = saved.reminder.on;
+    $('set-remind').textContent = on ? 'On' : 'Off';
+    $('set-remind').setAttribute('aria-pressed', String(on));
+}
+const REMIND_BLOCKED = "Notifications are turned off for this game. Allow them in your phone's Settings app, then switch this on.";
+function showReminderBlocked(blocked) {
+    $('set-remind-note').textContent = blocked ? REMIND_BLOCKED : '';
+    $('set-remind-note-row').hidden = !blocked;
+}
 /* The system switch can change while the game is closed. If notifications
-   were turned off there, say so beside the switch rather than showing On for
+   were turned off there, say so under the switch rather than show On for
    reminders that cannot arrive. */
 async function checkReminderPermission() {
     if (!Reminders.available())
         return;
-    const p = await Reminders.permission();
-    $('set-remind-note').textContent = p === 'denied' ? REMIND_BLOCKED : REMIND_NOTE;
+    showReminderBlocked((await Reminders.permission()) === 'denied');
+}
+/* First run only, straight after the tracking prompt: the system remembers
+   the answer, and the Settings switch handles a change of mind. Players who
+   answered the privacy sheet in an earlier version never pass through here;
+   the one-time offer below is theirs. */
+async function askForNotifications() {
+    if (!Reminders.available() || saved.reminder.asked)
+        return;
+    const result = await Reminders.enable();
+    if (result === 'on')
+        Track.event('daily_reminder', { on: true, hour: saved.reminder.hour, from: 'first_run' });
+    paintReminder();
+}
+/* Set while the phone's Settings is open from the switch, so coming back with
+   notifications allowed finishes switching them on. */
+let reminderFromSettings = false;
+async function finishReminderFromSettings() {
+    reminderFromSettings = false;
+    if ((await Reminders.permission()) !== 'granted')
+        return;
+    const result = await Reminders.enable();
+    showReminderBlocked(result !== 'on');
+    if (result === 'on')
+        Track.event('daily_reminder', { on: true, hour: saved.reminder.hour, from: 'settings' });
+    paintReminder();
 }
 async function toggleReminder() {
     const btn = $('set-remind');
@@ -1343,7 +1471,13 @@ async function toggleReminder() {
         }
         else {
             const result = await Reminders.enable();
-            $('set-remind-note').textContent = result === 'denied' ? REMIND_BLOCKED : REMIND_NOTE;
+            /* Refused before, so no prompt can appear: the phone's own settings
+               are the only way left, and coming back finishes the job. */
+            if (result === 'blocked') {
+                reminderFromSettings = true;
+                Reminders.openSettings();
+            }
+            showReminderBlocked(result === 'denied' || result === 'blocked');
             if (result === 'on')
                 Track.event('daily_reminder', { on: true, hour: saved.reminder.hour, from: 'settings' });
         }
@@ -1361,7 +1495,9 @@ function puzzlesFinished() {
         n += saved.progress[mode].best.filter((b) => b > 0).length;
     return n;
 }
-/* Offered once per install, at whichever comes first: the first daily done
+/* For players who answered the privacy sheet before reminders existed, so
+   never met the first-run question. Offered once per install, at whichever
+   comes first: the first daily done
    (the reminder is about the daily, so that is when it means most), or ten
    puzzles finished anywhere (somebody who has stuck around but not found the
    daily yet). Called once the win card has closed and any ad has gone, so it
@@ -1380,7 +1516,7 @@ async function maybeOfferReminder(kind) {
     const lead = $('reminder-lead');
     lead.hidden = daily;
     lead.textContent = daily ? ''
-        : puzzlesFinished() + ' puzzles done, nice work! There is a new daily puzzle every day too.';
+        : puzzlesFinished() + ' puzzles solved, nice work! There is also a new Daily Puzzle every day.';
     $('reminder-time').textContent = hourLabel(saved.reminder.hour);
     openOverlay('overlay-reminder');
     $('reminder-yes').focus();
@@ -1402,6 +1538,11 @@ async function boot() {
         solved: () => new Set(saved.days),
     });
     wire();
+    /* Before the ad SDK can start: the store's answer (or the cached one,
+       offline) is what decides whether it starts at all. */
+    Purchases.onChange(() => paintPurchase());
+    await Purchases.start();
+    paintPurchase();
     /* A tapped reminder opens the daily calendar — unless a puzzle is being
        played, which is left alone rather than thrown away. */
     Reminders.onOpen(() => {
@@ -1417,8 +1558,11 @@ async function boot() {
        while the game sat in the background. */
     void Reminders.sync();
     document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible')
-            void Reminders.sync();
+        if (document.visibilityState !== 'visible')
+            return;
+        void Reminders.sync();
+        if (reminderFromSettings)
+            void finishReminderFromSettings();
     });
     paintRandomScreen();
     paintHome();

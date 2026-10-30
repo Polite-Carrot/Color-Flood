@@ -10,6 +10,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { Ads, CLOSE_TIMEOUT_MS, Gate, GAME_ID, MIN_LEVELS, MIN_MS, PLACEMENT } from "../js/ads.js";
+import { Purchases } from "../js/purchases.js";
 const PoliteCarrotAds = createRequire(import.meta.url)('@politecarrot/capacitor-unity-ads');
 const T0 = 1_700_000_000_000; /* any fixed instant; nothing here reads a clock */
 const wins = (gate, n) => { for (let i = 0; i < n; i++)
@@ -178,6 +179,7 @@ describe('through the shared package', () => {
     afterEach(() => {
         delete globalThis['window'];
         delete globalThis['Capacitor'];
+        vi.restoreAllMocks();
         vi.useRealTimers();
     });
     it('asks for tracking, sends consent, then starts Unity and warms an ad', async () => {
@@ -230,6 +232,28 @@ describe('through the shared package', () => {
         expect(done).toBe(false);
         await vi.advanceTimersByTimeAsync(1);
         await expect(p).resolves.toBe(true);
+    });
+    it('never starts Unity for a player who bought Remove Ads', async () => {
+        vi.spyOn(Purchases, 'adsRemoved').mockReturnValue(true);
+        await due();
+        await expect(Ads.maybeShow()).resolves.toBe(false);
+        /* The tracking answer still goes through (analytics reads it); the SDK
+           never initialises and nothing is loaded or shown. */
+        expect(calls.filter((c) => !c.startsWith('consent='))).toEqual([]);
+    });
+    it('a refund brings ads back without a restart', async () => {
+        const owned = vi.spyOn(Purchases, 'adsRemoved').mockReturnValue(true);
+        await due();
+        owned.mockReturnValue(false);
+        /* Wins while ads were removed did not count, so the refunded player
+           starts a fresh three, then sees one. */
+        expect(Ads.gate.levels).toBe(0);
+        for (let i = 0; i < MIN_LEVELS; i++)
+            Ads.noteWin();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(calls).toContain('load ' + PLACEMENT.ios);
+        vi.setSystemTime(T0 + 2 * MIN_MS);
+        await expect(Ads.maybeShow()).resolves.toBe(true);
     });
     it('never asks for an ad before the privacy sheet has been answered', async () => {
         Ads.noteWin();

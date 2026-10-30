@@ -767,6 +767,7 @@ from, and `git push` is the deploy.
 | `js/sound.js` | The blips. With `app.js`, the only files in `js/` that know a DOM exists. |
 | `js/share.js` | A finished daily, as three lines you can paste. Pure, so it has a test. |
 | `js/reminders.js` | The daily reminder: local notifications for the next seven days, rebuilt on launch, resume and every finished daily. The plan is pure, so it has a test. |
+| `js/purchases.js` | Remove Ads: the one in-app purchase, Restore, and the cache of who owns it. |
 | `js/haptics.js` | The taps you feel. The same three moments the sound marks, native only. |
 | `js/ads.js` | When an interstitial is allowed to appear, and the Unity calls that show it. A no-op off a phone. |
 | `vendor/unity-ads.js` | The shared `@politecarrot/capacitor-unity-ads` client, copied from `node_modules` by `scripts/sync-www.js`. |
@@ -895,18 +896,34 @@ promising a streak that has already gone is worse than one that does not
 mention it. The number comes from `streakOf()`, the same arithmetic as the
 calendar.
 
-**Asking.** Permission is asked only after **Remind me**, never at launch:
-iOS shows that system prompt once per install. The offer comes once, at
-whichever comes first: the first daily done, or ten puzzles finished anywhere
-(campaign levels, dailies and random wins — `saved.randomWins` exists for
-this). It waits until the win card and any ad have gone. If the system has
-already said no, the offer is not shown, and Settings says where to turn
-notifications back on.
+This follows the studio's `capacitor-game-services` skill (in color-sorting,
+`.github/skills/`), as Color Match & Merge ships it.
 
-**Settings** has the switch and a time picker, 7am to 10pm. Both rows are
-hidden on the web, where there is nothing to notify with. The choice lives in
-the save as `saved.reminder` (`on`, `asked`, `hour`), and **Reset progress
-leaves it alone**: it is a setting, not progress.
+**Asking.** A new player is asked once, on first run, straight after Apple's
+tracking prompt: the privacy sheet, Continue, the tracking prompt, then the
+notification prompt. iOS shows one system prompt at a time, which is why
+`Ads.start()` resolves when the tracking answer is in and the notification
+question waits for it. On Android there is no tracking prompt, so the
+notification prompt (Android 13+) follows Continue directly.
+
+Players who answered the privacy sheet before reminders existed never pass
+through first run, so they get a one-time **"Daily reminder?"** offer
+instead, at whichever comes first: the first daily done, or ten puzzles
+finished anywhere (campaign levels, dailies and random wins —
+`saved.randomWins` exists for this). It waits until the win card and any ad
+have gone, and is not shown if the system has already said no.
+
+**Settings** has one switch, **Notifications**, and the reminder is always
+at 6pm. iOS shows the permission prompt once per install and Android at most
+twice, so after a refusal `enable()` returns `'blocked'` and the switch opens
+the phone's own settings instead: `app-settings:` on iOS, and on Android the
+app's notification page through `NotificationSettingsPlugin.java`, registered
+in `MainActivity` before the bridge starts. Coming back with notifications
+allowed finishes switching them on. When they are turned off in the phone's
+settings, a quiet line under the switch says so. All of it is hidden on the
+web. The choice lives in the save as `saved.reminder` (`on`, `asked`,
+`hour`), and **Reset progress leaves it alone**: it is a setting, not
+progress.
 
 **Tapping** a reminder opens the daily calendar, unless a puzzle is being
 played, which is left alone.
@@ -919,7 +936,55 @@ a white status-bar icon, `res/drawable/ic_stat_daily.xml`: a board with the
 flood stepping out from its corner.
 
 `test/reminders.test.js` covers the plan, the wording, the one-time offer,
-the permission paths and the web.
+the permission paths (including blocked) and the web.
+
+### Remove Ads
+
+One non-consumable in-app purchase, `remove_ads`, through
+`@capgo/native-purchases` (StoreKit 2 on iOS, Google Play Billing on
+Android), ported from the same skill. No server and no account: each store
+keeps the record, and the phone asks it.
+
+- **Where:** a "Remove ads" row in Settings showing the store's own price, a
+  "Bought it already?" **Restore** row (Apple requires one), and a
+  "Remove ads · £1.99" button in the home footer, which becomes "No ads" on
+  short phones so the footer stays on one row. All hidden on the web.
+- **What it does:** `Ads` checks `Purchases.adsRemoved()` on every call. A
+  player who owns it never has Unity started; a purchase takes effect from the
+  next win, and a refund brings ads back, with no restart either way. The
+  tracking prompt still happens on first run, because analytics reads it.
+- **Who decides:** the store, asked at launch, on every return to the
+  foreground and, on iOS, on every `transactionUpdated` (Ask to Buy, another
+  device, refunds). `color-flood/removeAds.v1` is only a cache so an offline
+  launch shows no ad to somebody who paid. It is kept in both localStorage and
+  native storage, and under **its own key**, so Reset progress can never take
+  a purchase away. A failed query keeps the cache; only a successful one
+  without the product clears it.
+- **States:** price → bought ("Removed", "Thank you! Ads are gone for
+  good."), pending ("Waiting for the payment to be approved…"), cancelled
+  (nothing), failed ("The purchase did not go through…"). From the home
+  button, a failure or pending payment opens Settings with the explanation,
+  beside Restore.
+
+**Store setup** (nothing works until these are done):
+
+1. **App Store Connect:** create an In-App Purchase, type **Non-Consumable**,
+   product ID `remove_ads`, with a price, display name, description and a
+   review screenshot. **Attach it to the app version** when submitting: a
+   first IAP is reviewed with a version. Sign the **Paid Apps Agreement** and
+   fill in banking and tax, or the store returns no products. Test from
+   TestFlight with a sandbox account.
+2. **Play Console:** upload a build with this plugin to a testing track first
+   (Play only allows in-app products after that), then Monetize → Products →
+   In-app products → `remove_ads`, set **Active**. Set up a payments profile.
+   Test from an internal testing build with your account as a **license
+   tester**.
+
+If the price appears on the button and a test purchase removes ads, the setup
+works. `test/purchases.test.js` covers fresh install, buying, the separate
+key, the native cache, refunds, a failed query, cancel, pending, Android
+acknowledging, "already owned", Restore, a stale query, Ask to Buy and the
+web; `test/ads.test.js` covers Unity never starting and a refund.
 
 ## Seeds
 

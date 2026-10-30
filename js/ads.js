@@ -24,6 +24,7 @@
    Kept apart from the plugin on purpose. This half is arithmetic over two
    numbers, it is what the ask was actually about, and it is the half worth
    having a test for — none of which is true of the plugin plumbing. */
+import { Purchases } from "./purchases.js";
 export const MIN_MS = 2 * 60 * 1000;
 export const MIN_LEVELS = 3;
 export class Gate {
@@ -68,6 +69,10 @@ export const TEST_MODE = false;
    to the next board after this long, and the package's own `showing` flag
    still stops a second ad stacking on the first. */
 export const CLOSE_TIMEOUT_MS = 2 * 60 * 1000;
+/* Bought Remove Ads (purchases.js): nothing is loaded or shown, and Unity is
+   never started. Read live on every call, so a purchase takes effect from the
+   next win and a refund brings ads back, without a restart either way. */
+const removed = () => Purchases.adsRemoved();
 const host = () => (typeof window === 'undefined' ? null : window);
 const platform = () => (host()?.Capacitor?.getPlatform?.() === 'ios' ? 'ios' : 'android');
 const after = (ms, value) => new Promise((resolve) => setTimeout(() => resolve(value), ms));
@@ -108,7 +113,7 @@ export const Ads = {
     },
     warm() {
         const client = this.get();
-        if (!client || !this.started || this.showing)
+        if (!client || !this.started || this.showing || removed())
             return Promise.resolve(false);
         if (this.preparing)
             return this.preparing;
@@ -119,7 +124,7 @@ export const Ads = {
     },
     /* Called once per puzzle finished. */
     noteWin() {
-        if (!this.on())
+        if (!this.on() || removed())
             return;
         this.gate.note();
         if (this.gate.warming() && !this.get().state().prepared.interstitial)
@@ -129,7 +134,7 @@ export const Ads = {
        three buttons. Never waits on the network: an ad that is not already
        loaded is skipped, and one is lined up for the next seam. */
     async maybeShow() {
-        if (!this.on() || !this.started || this.showing)
+        if (!this.on() || !this.started || this.showing || removed())
             return false;
         if (!this.gate.due(Date.now()))
             return false;
@@ -164,18 +169,29 @@ export const Ads = {
     /* After the privacy sheet: the ATT prompt (iOS only; Android answers
        "notApplicable", which is a no), the consent flags that answer becomes,
        then the SDK and a first warm ad well before the third win. */
+    /* Resolves once the tracking prompt has been answered (at once where there
+       is none), so the first run can ask for notifications after it: iOS shows
+       one system prompt at a time. Unity carries on starting in the background. */
     start() {
         if (!this.on() || this.started)
-            return;
+            return Promise.resolve();
         this.started = true;
         const client = this.get();
+        let answered;
+        const tracked = new Promise((resolve) => { answered = resolve; });
         void (async () => {
             try {
                 this.settle((await client.requestTracking()) === 'authorized');
             }
             catch { /* keep the saved answer */ }
+            answered();
+            /* The tracking answer still matters to analytics; the SDK does not
+               start at all for somebody who paid to remove ads. */
+            if (removed())
+                return;
             await client.init();
             await this.warm();
         })();
+        return tracked;
     },
 };

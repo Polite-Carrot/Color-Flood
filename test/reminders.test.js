@@ -4,7 +4,7 @@
  * stand-in LocalNotifications plugin and this game's own save shape and
  * streak arithmetic. */
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { DAYS_AHEAD, FIRST_ID, HOURS, bodyFor, hourLabel, makeReminders, plan, readReminder } from '../js/reminders.js';
+import { DAYS_AHEAD, FIRST_ID, bodyFor, hourLabel, makeReminders, plan, readReminder } from '../js/reminders.js';
 import { dayKey } from '../js/levels.js';
 
 function setup({ permission = 'prompt', answer = 'granted', platform = 'ios', native = true, stored = null, days = [] } = {}) {
@@ -110,6 +110,35 @@ describe('daily reminders', () => {
         expect(f.calls.some((c) => c[0] === 'schedule')).toBe(false);
     });
 
+    it('refused before: no prompt can appear, so it says blocked', async () => {
+        const f = setup({ permission: 'denied' });
+        expect(await f.R.enable()).toBe('blocked');
+        expect(f.calls.some((c) => c[0] === 'requestPermissions'), 'nothing to show').toBe(false);
+        expect(f.saved.reminder).toEqual({ on: false, asked: true, hour: 18 });
+    });
+
+    it('refusing the prompt just shown is denied, not blocked', async () => {
+        const f = setup({ answer: 'denied' });
+        expect(await f.R.enable()).toBe('denied');
+    });
+
+    it('opens the phone settings: app-settings: on iOS', () => {
+        const f = setup({ platform: 'ios' });
+        globalThis.window.location = { href: '' };
+        f.R.openSettings();
+        expect(globalThis.window.location.href).toBe('app-settings:');
+    });
+
+    it("opens the phone settings: the app's notification page on Android", async () => {
+        const opened = [];
+        const f = setup({ platform: 'android' });
+        globalThis.window.Capacitor.registerPlugin = (name) => (name === 'NotificationSettings'
+            ? { open: async () => { opened.push(name); } } : f.plugin);
+        f.R.openSettings();
+        await Promise.resolve();
+        expect(opened).toEqual(['NotificationSettings']);
+    });
+
     it('offers once, and never where the system already said no', async () => {
         const f = setup();
         expect(await f.R.shouldOffer()).toBe(true);
@@ -198,11 +227,9 @@ describe('the saved choice', () => {
         expect(readReminder('nonsense')).toEqual({ on: false, asked: false, hour: 18 });
     });
 
-    it('offers 7am to 10pm', () => {
-        expect(HOURS[0]).toBe(7);
-        expect(HOURS.at(-1)).toBe(22);
-        expect(HOURS.map(hourLabel).slice(0, 6)).toEqual(['7am', '8am', '9am', '10am', '11am', '12pm']);
+    it('labels the hour the way the offer says it', () => {
         expect(hourLabel(18)).toBe('6pm');
-        expect(hourLabel(22)).toBe('10pm');
+        expect(hourLabel(12)).toBe('12pm');
+        expect(hourLabel(7)).toBe('7am');
     });
 });
